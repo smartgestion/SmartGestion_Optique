@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, fmtDiopter, fmtAxe } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { updateStockAndNotify } from '@/lib/notifications'
@@ -191,8 +191,8 @@ export function AvoirFournisseurForm({ onSuccess }: AvoirFournisseurFormProps) {
     const prescr = prescriptions.find((p) => p.id.toString() === prescriptionId);
     if (!prescr) return;
     setSelectedPrescription(prescr);
-    const odStr = `OD: ${prescr.od_sph_vl ?? '-'}${prescr.od_cyl_vl ? ` (${prescr.od_cyl_vl})` : ''}`;
-    const ogStr = `OG: ${prescr.og_sph_vl ?? '-'}${prescr.og_cyl_vl ? ` (${prescr.og_cyl_vl})` : ''}`;
+    const odStr = `OD: ${fmtDiopter(prescr.od_sph_vl, '-')}${prescr.od_cyl_vl ? ` (${fmtDiopter(prescr.od_cyl_vl)})` : ''}`;
+    const ogStr = `OG: ${fmtDiopter(prescr.og_sph_vl, '-')}${prescr.og_cyl_vl ? ` (${fmtDiopter(prescr.og_cyl_vl)})` : ''}`;
     setVerreDesignation(`Verre ${prescr.verre_type || ''} — ${odStr} / ${ogStr}`);
   };
 
@@ -518,8 +518,8 @@ export function AvoirFournisseurForm({ onSuccess }: AvoirFournisseurFormProps) {
                         <SelectItem value="__none" disabled>Aucune ordonnance active</SelectItem>
                       )}
                       {prescriptions.map((p) => {
-                        const odStr = `OD: ${p.od_sph_vl ?? '-'}${p.od_cyl_vl ? ` (${p.od_cyl_vl})` : ''}`;
-                        const ogStr = `OG: ${p.og_sph_vl ?? '-'}${p.og_cyl_vl ? ` (${p.og_cyl_vl})` : ''}`;
+                        const odStr = `OD: ${fmtDiopter(p.od_sph_vl, '-')}${p.od_cyl_vl ? ` (${fmtDiopter(p.od_cyl_vl)})` : ''}`;
+                        const ogStr = `OG: ${fmtDiopter(p.og_sph_vl, '-')}${p.og_cyl_vl ? ` (${fmtDiopter(p.og_cyl_vl)})` : ''}`;
                         return (
                           <SelectItem key={p.id} value={p.id.toString()}>
                             {p.date_ordonnance} — {odStr} / {ogStr} — {p.verre_type || '-'}
@@ -543,25 +543,25 @@ export function AvoirFournisseurForm({ onSuccess }: AvoirFournisseurFormProps) {
                 <div className="p-4">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 text-sm">
                     <div className="col-span-2 md:col-span-4 font-semibold text-slate-600 dark:text-slate-400 border-b pb-1 mb-1">Réfraction VL</div>
-                    <div className="text-slate-500">OD Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.od_sph_vl ?? '-'}</span></div>
-                    <div className="text-slate-500">OD Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.od_cyl_vl ?? '-'}</span></div>
-                    <div className="text-slate-500">OD Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.od_axe_vl ?? '-'}</span></div>
-                    <div className="text-slate-500">OD Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.od_add_vl ?? '-'}</span></div>
-                    <div className="text-slate-500">OG Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.og_sph_vl ?? '-'}</span></div>
-                    <div className="text-slate-500">OG Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.og_cyl_vl ?? '-'}</span></div>
-                    <div className="text-slate-500">OG Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.og_axe_vl ?? '-'}</span></div>
-                    <div className="text-slate-500">OG Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.og_add_vl ?? '-'}</span></div>
+                    <div className="text-slate-500">OD Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_sph_vl, '-')}</span></div>
+                    <div className="text-slate-500">OD Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_cyl_vl, '-')}</span></div>
+                    <div className="text-slate-500">OD Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.od_axe_vl, '-')}</span></div>
+                    <div className="text-slate-500">OD Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_add_vl, '-')}</span></div>
+                    <div className="text-slate-500">OG Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_sph_vl, '-')}</span></div>
+                    <div className="text-slate-500">OG Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_cyl_vl, '-')}</span></div>
+                    <div className="text-slate-500">OG Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.og_axe_vl, '-')}</span></div>
+                    <div className="text-slate-500">OG Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_add_vl, '-')}</span></div>
                     {selectedPrescription.od_sph_vp != null && (
                       <>
                         <div className="col-span-2 md:col-span-4 font-semibold text-slate-600 dark:text-slate-400 border-b pb-1 mb-1 mt-2">Réfraction VP</div>
-                        <div className="text-slate-500">OD Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.od_sph_vp ?? '-'}</span></div>
-                        <div className="text-slate-500">OD Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.od_cyl_vp ?? '-'}</span></div>
-                        <div className="text-slate-500">OD Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.od_axe_vp ?? '-'}</span></div>
-                        <div className="text-slate-500">OD Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.od_add_vp ?? '-'}</span></div>
-                        <div className="text-slate-500">OG Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.og_sph_vp ?? '-'}</span></div>
-                        <div className="text-slate-500">OG Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.og_cyl_vp ?? '-'}</span></div>
-                        <div className="text-slate-500">OG Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.og_axe_vp ?? '-'}</span></div>
-                        <div className="text-slate-500">OG Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{selectedPrescription.og_add_vp ?? '-'}</span></div>
+                        <div className="text-slate-500">OD Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_sph_vp, '-')}</span></div>
+                        <div className="text-slate-500">OD Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_cyl_vp, '-')}</span></div>
+                        <div className="text-slate-500">OD Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.od_axe_vp, '-')}</span></div>
+                        <div className="text-slate-500">OD Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_add_vp, '-')}</span></div>
+                        <div className="text-slate-500">OG Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_sph_vp, '-')}</span></div>
+                        <div className="text-slate-500">OG Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_cyl_vp, '-')}</span></div>
+                        <div className="text-slate-500">OG Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.og_axe_vp, '-')}</span></div>
+                        <div className="text-slate-500">OG Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_add_vp, '-')}</span></div>
                       </>
                     )}
                     {(selectedPrescription.dp_binoculaire || selectedPrescription.dp_od || selectedPrescription.dp_og) && (

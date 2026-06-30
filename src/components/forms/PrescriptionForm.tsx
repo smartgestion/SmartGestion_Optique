@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner'
+import { fmtDiopter, fmtAxe } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { Stethoscope, User, Phone, Mail, MapPin } from 'lucide-react'
@@ -64,6 +65,16 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
     ogAxeVp: z.coerce.number().int().optional(),
     ogAddVp: z.coerce.number().optional(),
 
+    // "Progressif" type — single Vision de loin section + Addition
+    odSphProg: z.coerce.number().optional(),
+    odCylProg: z.coerce.number().optional(),
+    odAxeProg: z.coerce.number().int().optional(),
+    odAddProg: z.coerce.number().optional(),
+    ogSphProg: z.coerce.number().optional(),
+    ogCylProg: z.coerce.number().optional(),
+    ogAxeProg: z.coerce.number().int().optional(),
+    ogAddProg: z.coerce.number().optional(),
+
     odAvVl: z.coerce.number().optional(),
     ogAvVl: z.coerce.number().optional(),
     odAvVp: z.coerce.number().optional(),
@@ -101,6 +112,10 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
 
     verreType: z.string().optional(),
     verreIndice: z.coerce.number().optional(),
+    odIndiceVl: z.coerce.number().optional(),
+    ogIndiceVl: z.coerce.number().optional(),
+    odIndiceVp: z.coerce.number().optional(),
+    ogIndiceVp: z.coerce.number().optional(),
     verreTraitement: z.string().optional(),
     statut: z.string().optional(),
   });
@@ -140,6 +155,14 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
       ogCylVp: initialData?.og_cyl_vp ?? '',
       ogAxeVp: initialData?.og_axe_vp ?? '',
       ogAddVp: initialData?.og_add_vp ?? '',
+      odSphProg: initialData?.od_sph_prog ?? '',
+      odCylProg: initialData?.od_cyl_prog ?? '',
+      odAxeProg: initialData?.od_axe_prog ?? '',
+      odAddProg: initialData?.od_add_prog ?? '',
+      ogSphProg: initialData?.og_sph_prog ?? '',
+      ogCylProg: initialData?.og_cyl_prog ?? '',
+      ogAxeProg: initialData?.og_axe_prog ?? '',
+      ogAddProg: initialData?.og_add_prog ?? '',
       odAvVl: initialData?.od_av_vl ?? '',
       ogAvVl: initialData?.og_av_vl ?? '',
       odAvVp: initialData?.od_av_vp ?? '',
@@ -172,6 +195,10 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
       angleCourbeFaciale: initialData?.angle_courbe_faciale ?? '',
       verreType: initialData?.verre_type || '',
       verreIndice: initialData?.verre_indice ?? '',
+      odIndiceVl: initialData?.od_indice_vl ?? '',
+      ogIndiceVl: initialData?.og_indice_vl ?? '',
+      odIndiceVp: initialData?.od_indice_vp ?? '',
+      ogIndiceVp: initialData?.og_indice_vp ?? '',
       verreTraitement: initialData?.verre_traitement || '',
       statut: initialData?.statut || 'active',
     },
@@ -193,6 +220,9 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
   //   source VL → SPH_vp = SPH_vl + ADD ; CYL/AXE copied from VL
   //   source VP → SPH_vl = SPH_vp - ADD ; CYL/AXE copied from VP
   const isProgressif = visionType === 'progressif';
+  // New "Progressif" type: a single Vision de loin section with Addition,
+  // stored in dedicated *_prog columns (independent of vl/vp/unifocal).
+  const isProgressifVl = visionType === 'progressif_vl';
   const progressifSource = form.watch('progressifSource') || 'vl';
   const sourceIsVl = progressifSource === 'vl';
 
@@ -294,6 +324,14 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
         ogCylVp: initialData.og_cyl_vp ?? '',
         ogAxeVp: initialData.og_axe_vp ?? '',
         ogAddVp: initialData.og_add_vp ?? '',
+        odSphProg: initialData.od_sph_prog ?? '',
+        odCylProg: initialData.od_cyl_prog ?? '',
+        odAxeProg: initialData.od_axe_prog ?? '',
+        odAddProg: initialData.od_add_prog ?? '',
+        ogSphProg: initialData.og_sph_prog ?? '',
+        ogCylProg: initialData.og_cyl_prog ?? '',
+        ogAxeProg: initialData.og_axe_prog ?? '',
+        ogAddProg: initialData.og_add_prog ?? '',
         odAvVl: initialData.od_av_vl ?? '',
         ogAvVl: initialData.og_av_vl ?? '',
         odAvVp: initialData.od_av_vp ?? '',
@@ -326,6 +364,10 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
         angleCourbeFaciale: initialData.angle_courbe_faciale ?? '',
         verreType: initialData.verre_type || '',
         verreIndice: initialData.verre_indice ?? '',
+        odIndiceVl: initialData.od_indice_vl ?? '',
+        ogIndiceVl: initialData.og_indice_vl ?? '',
+        odIndiceVp: initialData.od_indice_vp ?? '',
+        ogIndiceVp: initialData.og_indice_vp ?? '',
         verreTraitement: initialData.verre_traitement || '',
         statut: initialData.statut || 'active',
       });
@@ -365,6 +407,14 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
         og_cyl_vp: data.ogCylVp || null,
         og_axe_vp: data.ogAxeVp || null,
         og_add_vp: data.ogAddVp || null,
+        od_sph_prog: data.odSphProg || null,
+        od_cyl_prog: data.odCylProg || null,
+        od_axe_prog: data.odAxeProg || null,
+        od_add_prog: data.odAddProg || null,
+        og_sph_prog: data.ogSphProg || null,
+        og_cyl_prog: data.ogCylProg || null,
+        og_axe_prog: data.ogAxeProg || null,
+        og_add_prog: data.ogAddProg || null,
         od_av_vl: data.odAvVl || null,
         og_av_vl: data.ogAvVl || null,
         od_av_vp: data.odAvVp || null,
@@ -397,6 +447,10 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
         angle_courbe_faciale: data.angleCourbeFaciale || null,
         verre_type: data.verreType || null,
         verre_indice: data.verreIndice || null,
+        od_indice_vl: data.odIndiceVl || null,
+        og_indice_vl: data.ogIndiceVl || null,
+        od_indice_vp: data.odIndiceVp || null,
+        og_indice_vp: data.ogIndiceVp || null,
         verre_traitement: data.verreTraitement || null,
         statut: data.statut || 'active',
       };
@@ -458,9 +512,19 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
               <FormItem><FormLabel className="text-xs">Axe</FormLabel>
                 <FormControl><Input type="number" placeholder="0" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} /></FormControl></FormItem>
             )} />
-            <FormField control={form.control} name={`odAdd${suffix}` as any} render={({ field }) => (
-              <FormItem><FormLabel className="text-xs">Addition</FormLabel>
-                <FormControl><Input type="number" step="0.25" placeholder="0.00" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} /></FormControl></FormItem>
+            <FormField control={form.control} name={`odIndice${suffix}` as any} render={({ field }) => (
+              <FormItem><FormLabel className="text-xs">Indice</FormLabel>
+                <Select onValueChange={(v) => field.onChange(v ? parseFloat(v) : '')} value={field.value?.toString() || ''}>
+                  <FormControl>
+                    <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Indice..." /></SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {INDICE_OPTIONS.map((ind) => (
+                      <SelectItem key={ind} value={ind}>{ind}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormItem>
             )} />
           </div>
           {/* AV */}
@@ -536,9 +600,19 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
               <FormItem><FormLabel className="text-xs">Axe</FormLabel>
                 <FormControl><Input type="number" placeholder="0" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} /></FormControl></FormItem>
             )} />
-            <FormField control={form.control} name={`ogAdd${suffix}` as any} render={({ field }) => (
-              <FormItem><FormLabel className="text-xs">Addition</FormLabel>
-                <FormControl><Input type="number" step="0.25" placeholder="0.00" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} /></FormControl></FormItem>
+            <FormField control={form.control} name={`ogIndice${suffix}` as any} render={({ field }) => (
+              <FormItem><FormLabel className="text-xs">Indice</FormLabel>
+                <Select onValueChange={(v) => field.onChange(v ? parseFloat(v) : '')} value={field.value?.toString() || ''}>
+                  <FormControl>
+                    <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Indice..." /></SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {INDICE_OPTIONS.map((ind) => (
+                      <SelectItem key={ind} value={ind}>{ind}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormItem>
             )} />
           </div>
           {/* AV */}
@@ -760,14 +834,15 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
                 <SelectContent>
                   <SelectItem value="vl">Vision de loin</SelectItem>
                   <SelectItem value="vp">Vision de près</SelectItem>
-                  <SelectItem value="progressif">Progressif</SelectItem>
+                  <SelectItem value="progressif">Unifocal</SelectItem>
+                  <SelectItem value="progressif_vl">Progressif</SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
             </FormItem>
           )} />
 
-          {/* Progressif: source vision selector + Calculer button */}
+          {/* Unifocal: source vision selector + Calculer button */}
           {isProgressif && (
             <FormField control={form.control} name="progressifSource" render={({ field }) => (
               <FormItem>
@@ -782,6 +857,20 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
                       <SelectItem value="vp">Vision de près</SelectItem>
                     </SelectContent>
                   </Select>
+                  <FormField control={form.control} name={(sourceIsVl ? 'odAddVl' : 'odAddVp') as any} render={({ field: addField }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input type="number" step="0.25" placeholder="Add. OD" className="h-12 w-28 rounded-xl border-border/50 dark:bg-slate-950/50 dark:border-white/10" {...addField} />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name={(sourceIsVl ? 'ogAddVl' : 'ogAddVp') as any} render={({ field: addField }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input type="number" step="0.25" placeholder="Add. OG" className="h-12 w-28 rounded-xl border-border/50 dark:bg-slate-950/50 dark:border-white/10" {...addField} />
+                      </FormControl>
+                    </FormItem>
+                  )} />
                   <Button
                     type="button"
                     onClick={() => calculateProgressif(field.value || 'vl')}
@@ -790,6 +879,7 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
                     Calculer
                   </Button>
                 </div>
+                <FormLabel className="mt-1 block text-xs text-muted-foreground">Addition (OD / OG)</FormLabel>
                 <FormMessage />
               </FormItem>
             )} />
@@ -815,8 +905,8 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
           </div>
         )}
 
-        {/* OD / OG side-by-side (non-progressif only) */}
-        {!isProgressif && (
+        {/* OD / OG side-by-side (vl / vp only — not Unifocal, not Progressif) */}
+        {!isProgressif && !isProgressifVl && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* OD */}
           <div className="border rounded-[6px] p-4 space-y-4 bg-sky-50/30 dark:bg-white/5">
@@ -835,10 +925,6 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
                 <FormItem><FormLabel className="text-xs">Axe</FormLabel>
                   <FormControl><Input type="number" placeholder="0" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
               )} />
-              <FormField control={form.control} name="odAddVl" render={({ field }) => (
-                <FormItem><FormLabel className="text-xs">Addition</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
-              )} />
               </>) : (<>
               <FormField control={form.control} name="odSphVp" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Sphère VP</FormLabel>
@@ -851,10 +937,6 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
               <FormField control={form.control} name="odAxeVp" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Axe</FormLabel>
                   <FormControl><Input type="number" placeholder="0" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="odAddVp" render={({ field }) => (
-                <FormItem><FormLabel className="text-xs">Addition</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
               )} />
               </>)}
             </div>
@@ -932,10 +1014,6 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
                 <FormItem><FormLabel className="text-xs">Axe</FormLabel>
                   <FormControl><Input type="number" placeholder="0" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
               )} />
-              <FormField control={form.control} name="ogAddVl" render={({ field }) => (
-                <FormItem><FormLabel className="text-xs">Addition</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
-              )} />
               </>) : (<>
               <FormField control={form.control} name="ogSphVp" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Sphère VP</FormLabel>
@@ -948,10 +1026,6 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
               <FormField control={form.control} name="ogAxeVp" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Axe</FormLabel>
                   <FormControl><Input type="number" placeholder="0" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
-              )} />
-              <FormField control={form.control} name="ogAddVp" render={({ field }) => (
-                <FormItem><FormLabel className="text-xs">Addition</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
               )} />
               </>)}
             </div>
@@ -1008,6 +1082,171 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
                     </Select>
                   </FormItem>
                 )} />
+              </div>
+            </div>
+          </div>
+        </div>
+        )}
+
+        {/* Progressif: single Vision de loin section (OD/OG) with Addition.
+            Stored in dedicated *_prog columns. */}
+        {isProgressifVl && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-bold text-sky-700 dark:text-sky-400 uppercase tracking-wide">Vision de loin :</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* OD */}
+            <div className="border rounded-[6px] p-4 space-y-4 bg-sky-50/30 dark:bg-white/5">
+              <h3 className="text-sm font-semibold text-sky-700 dark:text-sky-400">Œil Droit (OD)</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <FormField control={form.control} name="odSphProg" render={({ field }) => (
+                  <FormItem><FormLabel className="text-xs">Sphère VL</FormLabel>
+                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="odCylProg" render={({ field }) => (
+                  <FormItem><FormLabel className="text-xs">Cylindre</FormLabel>
+                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="odAxeProg" render={({ field }) => (
+                  <FormItem><FormLabel className="text-xs">Axe</FormLabel>
+                    <FormControl><Input type="number" placeholder="0" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="odAddProg" render={({ field }) => (
+                  <FormItem><FormLabel className="text-xs">Addition</FormLabel>
+                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                )} />
+              </div>
+              {/* AV */}
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 uppercase mb-2">Acuité Visuelle</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField control={form.control} name="odAvVl" render={({ field }) => (
+                    <FormItem><FormLabel className="text-xs">VL</FormLabel>
+                      <FormControl><Input type="number" step="0.1" placeholder="10/10" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="odAvVp" render={({ field }) => (
+                    <FormItem><FormLabel className="text-xs">VP</FormLabel>
+                      <FormControl><Input type="number" step="0.1" placeholder="10/10" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  )} />
+                </div>
+                <FormField control={form.control} name="odAvNature" render={({ field }) => (
+                  <FormItem className="mt-2">
+                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                      <FormControl>
+                        <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Nature AV..." /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="cc">CC (corrigé)</SelectItem>
+                        <SelectItem value="sc">SC (sans correction)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
+              </div>
+              {/* Prisme */}
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 uppercase mb-2">Prisme</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <FormField control={form.control} name="odPrismeHorizontal" render={({ field }) => (
+                    <FormItem><FormLabel className="text-xs">Horizontal Δ</FormLabel>
+                      <FormControl><Input type="number" step="0.5" placeholder="0" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="odPrismeVertical" render={({ field }) => (
+                    <FormItem><FormLabel className="text-xs">Vertical Δ</FormLabel>
+                      <FormControl><Input type="number" step="0.5" placeholder="0" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="odPrismeBase" render={({ field }) => (
+                    <FormItem><FormLabel className="text-xs">Base</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''}>
+                        <FormControl>
+                          <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="..." /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {BASES_PRISME.map((b) => (
+                            <SelectItem key={b} value={b}>{b}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                </div>
+              </div>
+            </div>
+
+            {/* OG */}
+            <div className="border rounded-[6px] p-4 space-y-4 bg-emerald-50/30 dark:bg-white/5">
+              <h3 className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Œil Gauche (OG)</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <FormField control={form.control} name="ogSphProg" render={({ field }) => (
+                  <FormItem><FormLabel className="text-xs">Sphère VL</FormLabel>
+                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="ogCylProg" render={({ field }) => (
+                  <FormItem><FormLabel className="text-xs">Cylindre</FormLabel>
+                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="ogAxeProg" render={({ field }) => (
+                  <FormItem><FormLabel className="text-xs">Axe</FormLabel>
+                    <FormControl><Input type="number" placeholder="0" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                )} />
+                <FormField control={form.control} name="ogAddProg" render={({ field }) => (
+                  <FormItem><FormLabel className="text-xs">Addition</FormLabel>
+                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                )} />
+              </div>
+              {/* AV */}
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 uppercase mb-2">Acuité Visuelle</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField control={form.control} name="ogAvVl" render={({ field }) => (
+                    <FormItem><FormLabel className="text-xs">VL</FormLabel>
+                      <FormControl><Input type="number" step="0.1" placeholder="10/10" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="ogAvVp" render={({ field }) => (
+                    <FormItem><FormLabel className="text-xs">VP</FormLabel>
+                      <FormControl><Input type="number" step="0.1" placeholder="10/10" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  )} />
+                </div>
+                <FormField control={form.control} name="ogAvNature" render={({ field }) => (
+                  <FormItem className="mt-2">
+                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                      <FormControl>
+                        <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Nature AV..." /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="cc">CC (corrigé)</SelectItem>
+                        <SelectItem value="sc">SC (sans correction)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )} />
+              </div>
+              {/* Prisme */}
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 uppercase mb-2">Prisme</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <FormField control={form.control} name="ogPrismeHorizontal" render={({ field }) => (
+                    <FormItem><FormLabel className="text-xs">Horizontal Δ</FormLabel>
+                      <FormControl><Input type="number" step="0.5" placeholder="0" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="ogPrismeVertical" render={({ field }) => (
+                    <FormItem><FormLabel className="text-xs">Vertical Δ</FormLabel>
+                      <FormControl><Input type="number" step="0.5" placeholder="0" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="ogPrismeBase" render={({ field }) => (
+                    <FormItem><FormLabel className="text-xs">Base</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ''}>
+                        <FormControl>
+                          <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="..." /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {BASES_PRISME.map((b) => (
+                            <SelectItem key={b} value={b}>{b}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )} />
+                </div>
               </div>
             </div>
           </div>
@@ -1078,16 +1317,27 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
           <FormField control={form.control} name="verreIndice" render={({ field }) => (
             <FormItem>
               <FormLabel>Indice</FormLabel>
-              <Select onValueChange={(v) => field.onChange(v ? parseFloat(v) : '')} value={field.value?.toString() || ''}>
-                <FormControl>
-                  <SelectTrigger className="h-12 rounded-xl border-border/50 dark:bg-slate-950/50 dark:border-white/10"><SelectValue placeholder="Indice..." /></SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {INDICE_OPTIONS.map((ind) => (
-                    <SelectItem key={ind} value={ind}>{ind}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isProgressif ? (
+                <Select value="aucun" disabled>
+                  <FormControl>
+                    <SelectTrigger className="h-12 rounded-xl border-border/50 bg-muted/60 cursor-not-allowed text-muted-foreground dark:bg-slate-950/50 dark:border-white/10"><SelectValue /></SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="aucun">Aucun</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Select onValueChange={(v) => field.onChange(v ? parseFloat(v) : '')} value={field.value?.toString() || ''}>
+                  <FormControl>
+                    <SelectTrigger className="h-12 rounded-xl border-border/50 dark:bg-slate-950/50 dark:border-white/10"><SelectValue placeholder="Indice..." /></SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {INDICE_OPTIONS.map((ind) => (
+                      <SelectItem key={ind} value={ind}>{ind}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <FormMessage />
             </FormItem>
           )} />
@@ -1110,6 +1360,90 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
             </FormItem>
           )} />
         </div>
+
+        {/* Live signed-value preview (récapitulatif) — reflects what is typed
+            above, formatted with +/- like the printed ordonnance. */}
+        {(() => {
+          const w = form.watch();
+          // Build the (sph / cyl / axe / add) row for one eye+mode.
+          const row = (sph: any, cyl: any, axe: any, add: any) => ({
+            sph: fmtDiopter(sph, '—'),
+            cyl: fmtDiopter(cyl, '—'),
+            axe: fmtAxe(axe, '—'),
+            add: fmtDiopter(add, '—'),
+          });
+          // Sections to render depending on the selected Type de vision.
+          const sections: { title: string; od: any; og: any }[] = [];
+          if (isProgressifVl) {
+            sections.push({
+              title: 'Vision de loin',
+              od: row(w.odSphProg, w.odCylProg, w.odAxeProg, w.odAddProg),
+              og: row(w.ogSphProg, w.ogCylProg, w.ogAxeProg, w.ogAddProg),
+            });
+          } else if (isProgressif) {
+            sections.push({
+              title: 'Vision de loin',
+              od: row(w.odSphVl, w.odCylVl, w.odAxeVl, w.odAddVl),
+              og: row(w.ogSphVl, w.ogCylVl, w.ogAxeVl, w.ogAddVl),
+            });
+            sections.push({
+              title: 'Vision de près',
+              od: row(w.odSphVp, w.odCylVp, w.odAxeVp, w.odAddVp),
+              og: row(w.ogSphVp, w.ogCylVp, w.ogAxeVp, w.ogAddVp),
+            });
+          } else if (isVpOnly) {
+            sections.push({
+              title: 'Vision de près',
+              od: row(w.odSphVp, w.odCylVp, w.odAxeVp, w.odAddVp),
+              og: row(w.ogSphVp, w.ogCylVp, w.ogAxeVp, w.ogAddVp),
+            });
+          } else {
+            sections.push({
+              title: 'Vision de loin',
+              od: row(w.odSphVl, w.odCylVl, w.odAxeVl, w.odAddVl),
+              og: row(w.ogSphVl, w.ogCylVl, w.ogAxeVl, w.ogAddVl),
+            });
+          }
+          return (
+            <div className="rounded-[6px] border border-sky-200/60 bg-sky-50/40 p-4 dark:border-sky-500/20 dark:bg-sky-950/10">
+              <p className="mb-3 text-sm font-semibold text-sky-800 dark:text-sky-300">Aperçu de l'ordonnance</p>
+              <div className="space-y-4">
+                {sections.map((s) => (
+                  <div key={s.title}>
+                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{s.title}</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-[11px] uppercase text-slate-400">
+                            <th className="py-1 pe-3 text-start font-medium"></th>
+                            <th className="py-1 px-3 text-center font-medium">Sphère</th>
+                            <th className="py-1 px-3 text-center font-medium">Cylindre</th>
+                            <th className="py-1 px-3 text-center font-medium">Axe</th>
+                            <th className="py-1 px-3 text-center font-medium">Addition</th>
+                          </tr>
+                        </thead>
+                        <tbody className="font-mono">
+                          {(['OD', 'OG'] as const).map((eye) => {
+                            const d = eye === 'OD' ? s.od : s.og;
+                            return (
+                              <tr key={eye} className="border-t border-slate-200/60 dark:border-white/10">
+                                <td className="py-1.5 pe-3 font-sans font-semibold text-slate-700 dark:text-slate-200">{eye}</td>
+                                <td className="py-1.5 px-3 text-center text-slate-800 dark:text-white">{d.sph}</td>
+                                <td className="py-1.5 px-3 text-center text-slate-800 dark:text-white">{d.cyl}</td>
+                                <td className="py-1.5 px-3 text-center text-slate-800 dark:text-white">{d.axe}</td>
+                                <td className="py-1.5 px-3 text-center text-slate-800 dark:text-white">{d.add}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         <FormField control={form.control} name="notes" render={({ field }) => (
           <FormItem>

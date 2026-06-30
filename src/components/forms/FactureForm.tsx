@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, fmtDiopter } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { updateStockAndNotify, ensureLowStockNotifications } from '@/lib/notifications'
@@ -469,8 +469,8 @@ export function FactureForm({ initialData, onSuccess }: FactureFormProps) {
                   </SelectItem>
                 )}
                 {prescriptions.map((p) => {
-                  const odStr = `OD: ${p.od_sph_vl ?? '-'}${p.od_cyl_vl ? ` (${p.od_cyl_vl})` : ''}`;
-                  const ogStr = `OG: ${p.og_sph_vl ?? '-'}${p.og_cyl_vl ? ` (${p.og_cyl_vl})` : ''}`;
+                  const odStr = `OD: ${fmtDiopter(p.od_sph_vl, '-')}${p.od_cyl_vl ? ` (${fmtDiopter(p.od_cyl_vl)})` : ''}`;
+                  const ogStr = `OG: ${fmtDiopter(p.og_sph_vl, '-')}${p.og_cyl_vl ? ` (${fmtDiopter(p.og_cyl_vl)})` : ''}`;
                   return (
                     <SelectItem key={p.id} value={p.id.toString()}>
                       {p.date_ordonnance} — {odStr} / {ogStr}

@@ -649,6 +649,16 @@ pub const MIGRATIONS: &[&str] = &[
         og_axe_vp                   INTEGER,
         og_add_vp                   REAL,
 
+        -- "Progressif" (single Vision de loin section + Addition)
+        od_sph_prog                 REAL,
+        od_cyl_prog                 REAL,
+        od_axe_prog                 INTEGER,
+        od_add_prog                 REAL,
+        og_sph_prog                 REAL,
+        og_cyl_prog                 REAL,
+        og_axe_prog                 INTEGER,
+        og_add_prog                 REAL,
+
         -- Acuité visuelle
         od_av_vl                    REAL,
         og_av_vl                    REAL,
@@ -692,6 +702,11 @@ pub const MIGRATIONS: &[&str] = &[
         -- Verre prescrit
         verre_type                  TEXT,
         verre_indice                REAL,
+        -- Per-eye / per-section indice (Unifocal: OD/OG × VL/VP)
+        od_indice_vl                REAL,
+        og_indice_vl                REAL,
+        od_indice_vp                REAL,
+        og_indice_vp                REAL,
         verre_traitement            TEXT,
 
         -- Progressif: which vision section ('vl' | 'vp') is the source
@@ -955,4 +970,8 @@ pub const MIGRATIONS: &[&str] = &[
 ///        facture_lignes/parametres.
 ///   v4 — Portefeuille: portefeuille_folders / portefeuille_files /
 ///        portefeuille_papers document-management tables.
-pub const SCHEMA_VERSION: i64 = 4;
+///   v5 — prescriptions: per-eye/per-section refractive index columns
+///        (od_indice_vl/og_indice_vl/od_indice_vp/og_indice_vp) for Unifocal.
+///   v6 — prescriptions: "Progressif" single-VL section columns
+///        (od/og _sph/_cyl/_axe/_add _prog) with Addition.
+pub const SCHEMA_VERSION: i64 = 6;

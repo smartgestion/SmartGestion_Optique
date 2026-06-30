@@ -1,6 +1,6 @@
 import { forwardRef, useMemo, type CSSProperties } from 'react'
 import { format, isValid, parseISO } from 'date-fns'
-import { getDateLocale } from '@/lib/utils'
+import { getDateLocale, fmtDiopter, fmtSphCyl, fmtAxe } from '@/lib/utils'
 import { numberToFrenchWords } from '@/lib/numberToWords'
 import { DOC_COLORS as C, formatTraitement } from './docColors'
 
@@ -52,24 +52,9 @@ const makeFmtDate = (lang?: string) => (d: any): string => {
 const fmt2Money = (n: number): string =>
   new Intl.NumberFormat('fr-FR', { style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 
-function fmtSph(v: any): string {
-  if (v === null || v === undefined || v === '') return ''
-  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))
-  if (isNaN(n)) return ''
-  const sign = n < 0 ? '- ' : n > 0 ? '+ ' : ''
-  return `${sign}${Math.abs(n).toFixed(2)}`
-}
-
-/** Optique prescription line, e.g. "- 5.00 (- 1.00 à 31°)". */
-function formatSphCyl(sph: any, cyl: any, axe: any): string {
-  const s = fmtSph(sph)
-  if (!s) return ''
-  const c = fmtSph(cyl)
-  const hasAxe = axe !== null && axe !== undefined && axe !== ''
-  if (!c && !hasAxe) return s
-  const a = hasAxe ? ` à ${axe}°` : ''
-  return `${s} (${c}${a})`
-}
+// Signed dioptric / prescription-line formatters shared from '@/lib/utils'.
+const fmtSph = fmtDiopter
+const formatSphCyl = fmtSphCyl
 
 interface TvaBucket {
   rate: number
@@ -96,13 +81,13 @@ function computeTvaBuckets(lignes: any[]): TvaBucket[] {
   return Array.from(map.values()).sort((a, b) => b.rate - a.rate)
 }
 
-/** Single ordonnance cell value (Sph/Cyl/Axe/Add) → "- 0.25" / "-" when empty. */
-function fmtCell(v: any): string {
-  if (v === null || v === undefined || v === '') return '-'
-  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))
-  if (isNaN(n)) return String(v)
-  // Sphere/cyl/add keep a sign; axis is an integer angle.
-  return n.toString()
+/**
+ * Single ordonnance cell value (Sph/Cyl/Axe/Add) → "+ 0.25" / "- 0.25".
+ * Sphere/Cyl/Add are signed dioptric values; the axis (`isAxe`) is an integer
+ * angle with no sign. Empty → "-".
+ */
+function fmtCell(v: any, isAxe = false): string {
+  return isAxe ? fmtAxe(v, '-') : fmtDiopter(v, '-')
 }
 
 /**
@@ -317,10 +302,10 @@ function OptiqueBonCommandeDocument({ bon, entreprise, lang }: { bon: any; entre
                   <tr key={r.eye}>
                     <td style={{ ...tdMini, fontWeight: 700, color: C.title }}>{r.eye}</td>
                     {showVl && r.vl.map((v, i) => (
-                      <td key={`vl-${i}`} style={{ ...tdMini, ...(i === 0 ? { fontWeight: 700 } : null) }}>{fmtCell(v)}</td>
+                      <td key={`vl-${i}`} style={{ ...tdMini, ...(i === 0 ? { fontWeight: 700 } : null) }}>{fmtCell(v, i === 2)}</td>
                     ))}
                     {showVp && r.vp.map((v, i) => (
-                      <td key={`vp-${i}`} style={{ ...tdMini, ...(i === 0 ? { ...(showVl ? { borderLeft: `0.5pt solid ${C.borderSoft}` } : null), fontWeight: 700 } : null) }}>{fmtCell(v)}</td>
+                      <td key={`vp-${i}`} style={{ ...tdMini, ...(i === 0 ? { ...(showVl ? { borderLeft: `0.5pt solid ${C.borderSoft}` } : null), fontWeight: 700 } : null) }}>{fmtCell(v, i === 2)}</td>
                     ))}
                   </tr>
                 ))}

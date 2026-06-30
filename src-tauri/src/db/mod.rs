@@ -234,6 +234,24 @@ fn apply_migrations(conn: &Connection) -> DbResult<()> {
         // ('vl' or 'vp') the optician chose as the source values.
         add_column_if_missing(conn, "prescriptions", "progressif_source",       "TEXT")?;
 
+        // prescriptions — per-eye / per-section refractive index (Unifocal:
+        // each OD/OG × VL/VP Indice dropdown can hold a different value).
+        add_column_if_missing(conn, "prescriptions", "od_indice_vl",            "REAL")?;
+        add_column_if_missing(conn, "prescriptions", "og_indice_vl",            "REAL")?;
+        add_column_if_missing(conn, "prescriptions", "od_indice_vp",            "REAL")?;
+        add_column_if_missing(conn, "prescriptions", "og_indice_vp",            "REAL")?;
+
+        // prescriptions — "Progressif" type: single Vision de loin section
+        // (SPH/CYL/AXE) + Addition, stored independently of vl/vp/unifocal.
+        add_column_if_missing(conn, "prescriptions", "od_sph_prog",             "REAL")?;
+        add_column_if_missing(conn, "prescriptions", "od_cyl_prog",             "REAL")?;
+        add_column_if_missing(conn, "prescriptions", "od_axe_prog",             "INTEGER")?;
+        add_column_if_missing(conn, "prescriptions", "od_add_prog",             "REAL")?;
+        add_column_if_missing(conn, "prescriptions", "og_sph_prog",             "REAL")?;
+        add_column_if_missing(conn, "prescriptions", "og_cyl_prog",             "REAL")?;
+        add_column_if_missing(conn, "prescriptions", "og_axe_prog",             "INTEGER")?;
+        add_column_if_missing(conn, "prescriptions", "og_add_prog",             "REAL")?;
+
         // bons_commande — Verre Commande (optical) fields
         add_column_if_missing(conn, "bons_commande", "type",      "TEXT DEFAULT 'simple'")?;
         add_column_if_missing(conn, "bons_commande", "client_id", "INTEGER")?;

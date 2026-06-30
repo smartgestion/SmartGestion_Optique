@@ -1,6 +1,6 @@
 import { forwardRef, useMemo, type CSSProperties } from 'react'
 import { format, isValid, parseISO } from 'date-fns'
-import { getDateLocale } from '@/lib/utils'
+import { getDateLocale, fmtDiopter, fmtAxe } from '@/lib/utils'
 import { numberToFrenchWords } from '@/lib/numberToWords'
 import { DOC_COLORS as C, formatTraitement } from './docColors'
 
@@ -50,12 +50,13 @@ const makeFmtDate = (lang?: string) => (d: any): string => {
   }
 }
 
-/** Single ordonnance cell value (Sph/Cyl/Axe/Add) → "- 0.25" / "-" when empty. */
-function fmtCell(v: any): string {
-  if (v === null || v === undefined || v === '') return '-'
-  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))
-  if (isNaN(n)) return String(v)
-  return n.toString()
+/**
+ * Single ordonnance cell value (Sph/Cyl/Axe/Add) → "+ 0.25" / "- 0.25".
+ * Sphere/Cyl/Add are signed dioptric values; the axis (`isAxe`) is an integer
+ * angle with no sign. Empty → "-".
+ */
+function fmtCell(v: any, isAxe = false): string {
+  return isAxe ? fmtAxe(v, '-') : fmtDiopter(v, '-')
 }
 
 const docStyles = (
@@ -387,10 +388,10 @@ function VerreAvoirFournisseurDocument({ avoir, entreprise, lang }: { avoir: any
                   <tr key={r.eye}>
                     <td style={{ ...tdMini, fontWeight: 700, color: C.title }}>{r.eye}</td>
                     {showVl && r.vl.map((v, i) => (
-                      <td key={`vl-${i}`} style={{ ...tdMini, ...(i === 0 ? { fontWeight: 700 } : null) }}>{fmtCell(v)}</td>
+                      <td key={`vl-${i}`} style={{ ...tdMini, ...(i === 0 ? { fontWeight: 700 } : null) }}>{fmtCell(v, i === 2)}</td>
                     ))}
                     {showVp && r.vp.map((v, i) => (
-                      <td key={`vp-${i}`} style={{ ...tdMini, ...(i === 0 ? { ...(showVl ? { borderLeft: `0.5pt solid ${C.borderSoft}` } : null), fontWeight: 700 } : null) }}>{fmtCell(v)}</td>
+                      <td key={`vp-${i}`} style={{ ...tdMini, ...(i === 0 ? { ...(showVl ? { borderLeft: `0.5pt solid ${C.borderSoft}` } : null), fontWeight: 700 } : null) }}>{fmtCell(v, i === 2)}</td>
                     ))}
                   </tr>
                 ))}

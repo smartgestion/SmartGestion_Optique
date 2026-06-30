@@ -118,6 +118,64 @@ export function formatDate(
   }
 }
 
+/**
+ * Signed dioptric value formatter for prescription optical values
+ * (Sphère / Cylindre / Addition).
+ *
+ * Always shows a sign: "+" for positive and zero, "-" for negative, spaced
+ * away from the digits and rounded to 2 decimals.
+ *   1.25  → "+ 1.25"
+ *   -5    → "- 5.00"
+ *   0     → "+ 0.00"
+ *
+ * Empty / null / undefined / non-numeric → returns `empty` (default '').
+ */
+export function fmtDiopter(
+  v: number | string | null | undefined,
+  empty = '',
+): string {
+  if (v === null || v === undefined || v === '') return empty
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))
+  if (isNaN(n)) return empty
+  const sign = n < 0 ? '- ' : '+ '
+  return `${sign}${Math.abs(n).toFixed(2)}`
+}
+
+/**
+ * Axis formatter — the axis is an integer angle (0–180°) with NO sign.
+ *   31   → "31"
+ *   31.4 → "31"
+ * Empty / null / undefined / non-numeric → returns `empty` (default '').
+ */
+export function fmtAxe(
+  v: number | string | null | undefined,
+  empty = '',
+): string {
+  if (v === null || v === undefined || v === '') return empty
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))
+  if (isNaN(n)) return empty
+  return Math.round(n).toString()
+}
+
+/**
+ * Builds a full prescription correction line for one eye, e.g.
+ * "+ 1.25 (- 0.50 à 90°)". Sphere stays outside; cylinder (and axis) are
+ * wrapped in parentheses. Returns '' when no sphere value is present.
+ */
+export function fmtSphCyl(
+  sph: number | string | null | undefined,
+  cyl: number | string | null | undefined,
+  axe: number | string | null | undefined,
+): string {
+  const s = fmtDiopter(sph)
+  if (!s) return ''
+  const c = fmtDiopter(cyl)
+  const hasAxe = axe !== null && axe !== undefined && axe !== ''
+  if (!c && !hasAxe) return s
+  const a = hasAxe ? ` à ${fmtAxe(axe)}°` : ''
+  return `${s} (${c}${a})`
+}
+
 export function numberToFrenchWords(amount: number): string {
   if (amount === null || amount === undefined || isNaN(amount)) return "";
   

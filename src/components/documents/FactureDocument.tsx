@@ -1,6 +1,6 @@
 import { forwardRef, useMemo } from 'react'
 import { format, isValid, parseISO } from 'date-fns'
-import { getDateLocale } from '@/lib/utils'
+import { getDateLocale, fmtDiopter, fmtSphCyl } from '@/lib/utils'
 import { numberToFrenchWords } from '@/lib/numberToWords'
 import { DOC_COLORS as C, formatTraitement } from './docColors'
 
@@ -86,30 +86,10 @@ const civilite = (client: any) => {
   return 'Mr / Mme'
 }
 
-function fmtSph(v: any): string {
-  if (v === null || v === undefined || v === '') return ''
-  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'))
-  if (isNaN(n)) return ''
-  // Space the sign away from the digits → "- 5.00" / "+ 1.25" (matches the
-  // optique prescription style shown on the printed invoice).
-  const sign = n < 0 ? '- ' : n > 0 ? '+ ' : ''
-  return `${sign}${Math.abs(n).toFixed(2)}`
-}
-
-/**
- * Optique prescription line, e.g. "- 5.00 (- 1.00 à 31°)".
- * The sphere stays outside; cylinder (and axis) are wrapped in parentheses.
- * Returns '' when no sphere value is present.
- */
-function formatSphCyl(sph: any, cyl: any, axe: any): string {
-  const s = fmtSph(sph)
-  if (!s) return ''
-  const c = fmtSph(cyl)
-  const hasAxe = axe !== null && axe !== undefined && axe !== ''
-  if (!c && !hasAxe) return s
-  const a = hasAxe ? ` à ${axe}°` : ''
-  return `${s} (${c}${a})`
-}
+// Signed dioptric / prescription-line formatters live in '@/lib/utils' so
+// every page and document share the same convention ("+ 1.25" / "- 5.00").
+const fmtSph = fmtDiopter
+const formatSphCyl = fmtSphCyl
 
 /**
  * Optique invoice layout — mirrors the optique app's printable format
