@@ -16,7 +16,7 @@ import { toast } from 'sonner'
 import { fmtDiopter, fmtAxe } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
-import { Stethoscope, User, Phone, Mail, MapPin } from 'lucide-react'
+import { Stethoscope, User, Phone, Mail, MapPin, UploadCloud, FileText, X } from 'lucide-react'
 
 interface PrescriptionFormProps {
   initialData?: any;
@@ -118,6 +118,9 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
     ogIndiceVp: z.coerce.number().optional(),
     verreTraitement: z.string().optional(),
     statut: z.string().optional(),
+    // Original ordonnance scan/photo, stored as a base64 data URL.
+    scannedUrl: z.string().optional(),
+    scannedName: z.string().optional(),
   });
 
   type PrescriptionFormValues = z.infer<typeof prescriptionSchema>;
@@ -201,6 +204,8 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
       ogIndiceVp: initialData?.og_indice_vp ?? '',
       verreTraitement: initialData?.verre_traitement || '',
       statut: initialData?.statut || 'active',
+      scannedUrl: initialData?.scanned_url || '',
+      scannedName: initialData?.scanned_name || '',
     },
   });
 
@@ -226,6 +231,60 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
   const progressifSource = form.watch('progressifSource') || 'vl';
   const sourceIsVl = progressifSource === 'vl';
 
+  // Signed dioptric formatting for the prescription inputs (Sphère / Cylindre
+  // / Addition). A positive value shows a leading "+" (e.g. "+2.00") and a
+  // negative one keeps its "-" (e.g. "-1.25"), matching how an ordonnance is
+  // written. The stored value is still a plain number (Number("+2.00") === 2).
+
+  // Final formatting (on blur): normalise to a signed 2-decimal string.
+  const formatSignedDiopter = (raw: any): string => {
+    if (raw === '' || raw === null || raw === undefined) return '';
+    const s = String(raw).trim().replace(',', '.');
+    if (s === '' || s === '+' || s === '-') return '';
+    const n = parseFloat(s);
+    if (isNaN(n)) return '';
+    if (n === 0) return '0';
+    const abs = Math.abs(n).toFixed(2);
+    return (n > 0 ? '+' : '-') + abs;
+  };
+
+  // Live formatting (on every keystroke): keep the user's raw digits intact but
+  // guarantee a leading sign as soon as a digit is present. "-" stays negative;
+  // anything else with a digit gets a "+". Does NOT force ".00" while typing so
+  // the user can still type "2.2" etc. Empty / lone sign is preserved.
+  const liveSignedDiopter = (raw: any): string => {
+    if (raw === '' || raw === null || raw === undefined) return '';
+    let s = String(raw).replace(',', '.');
+    // Strip any characters that aren't digits, dot or a sign.
+    s = s.replace(/[^0-9.\-+]/g, '');
+    const negative = s.trimStart().startsWith('-');
+    // Remove every sign, then keep only the first dot.
+    let digits = s.replace(/[+\-]/g, '');
+    const firstDot = digits.indexOf('.');
+    if (firstDot !== -1) {
+      digits = digits.slice(0, firstDot + 1) + digits.slice(firstDot + 1).replace(/\./g, '');
+    }
+    if (digits === '' || digits === '.') {
+      // No digit yet — let the user keep a lone sign so they can continue.
+      return negative ? '-' : '';
+    }
+    return (negative ? '-' : '+') + digits;
+  };
+
+  // Spread onto a Sphère/Cylindre/Addition <Input> to add the +/- sign live
+  // (as they type) and finalise the 2-decimal format on blur.
+  const signedFieldProps = (field: any) => ({
+    type: 'text' as const,
+    inputMode: 'decimal' as const,
+    onChange: (e: { target: { value: string } }) => {
+      field.onChange(liveSignedDiopter(e.target.value));
+    },
+    onBlur: (e: { target: { value: string } }) => {
+      field.onChange(formatSignedDiopter(e.target.value));
+      field.onBlur?.();
+    },
+  });
+
   // Recalculate the auto-generated section from the editable source section.
   const calculateProgressif = (src: string = progressifSource) => {
     const v = form.getValues();
@@ -246,21 +305,24 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
       const cylVp = num(v[`${eye}CylVp` as keyof typeof v]);
       const axeVp = num(v[`${eye}AxeVp` as keyof typeof v]);
 
+      // The computed Sphère/Cylindre/Addition mirror the signed +/- display of
+      // the manually-entered fields; Axe stays a plain integer.
+      const sgn = (n: number | undefined) => (n === undefined ? '' : formatSignedDiopter(n));
       if (src === 'vl') {
         // Source = Vision de loin → compute Vision de près
         const add = num(v[`${eye}AddVl` as keyof typeof v]);
-        form.setValue(`${eye}SphVp` as any, sphVl !== undefined && add !== undefined ? round2(sphVl + add) : sphVl ?? '', opts);
-        form.setValue(`${eye}CylVp` as any, cylVl ?? '', opts);
+        form.setValue(`${eye}SphVp` as any, sphVl !== undefined && add !== undefined ? sgn(round2(sphVl + add)) : sgn(sphVl), opts);
+        form.setValue(`${eye}CylVp` as any, sgn(cylVl), opts);
         form.setValue(`${eye}AxeVp` as any, axeVl ?? '', opts);
         // ADD is entered once in the source section; mirror it for storage.
-        form.setValue(`${eye}AddVp` as any, add ?? '', opts);
+        form.setValue(`${eye}AddVp` as any, sgn(add), opts);
       } else {
         // Source = Vision de près → compute Vision de loin
         const add = num(v[`${eye}AddVp` as keyof typeof v]);
-        form.setValue(`${eye}SphVl` as any, sphVp !== undefined && add !== undefined ? round2(sphVp - add) : sphVp ?? '', opts);
-        form.setValue(`${eye}CylVl` as any, cylVp ?? '', opts);
+        form.setValue(`${eye}SphVl` as any, sphVp !== undefined && add !== undefined ? sgn(round2(sphVp - add)) : sgn(sphVp), opts);
+        form.setValue(`${eye}CylVl` as any, sgn(cylVp), opts);
         form.setValue(`${eye}AxeVl` as any, axeVp ?? '', opts);
-        form.setValue(`${eye}AddVl` as any, add ?? '', opts);
+        form.setValue(`${eye}AddVl` as any, sgn(add), opts);
       }
     });
   };
@@ -370,9 +432,65 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
         ogIndiceVp: initialData.og_indice_vp ?? '',
         verreTraitement: initialData.verre_traitement || '',
         statut: initialData.statut || 'active',
+        scannedUrl: initialData.scanned_url || '',
+        scannedName: initialData.scanned_name || '',
       });
     }
   }, [initialData, form]);
+
+  // Normalise the signed dioptric fields (Sphère / Cylindre / Addition) so an
+  // existing prescription opened for editing shows its "+"/"-" sign right away
+  // (not just after the field is touched).
+  useEffect(() => {
+    const signedFields = [
+      'odSphVl', 'odCylVl', 'odAddVl', 'ogSphVl', 'ogCylVl', 'ogAddVl',
+      'odSphVp', 'odCylVp', 'odAddVp', 'ogSphVp', 'ogCylVp', 'ogAddVp',
+      'odSphProg', 'odCylProg', 'odAddProg', 'ogSphProg', 'ogCylProg', 'ogAddProg',
+    ] as const;
+    for (const name of signedFields) {
+      const cur = form.getValues(name as any);
+      if (cur !== '' && cur !== null && cur !== undefined) {
+        const formatted = formatSignedDiopter(cur);
+        if (formatted !== String(cur)) {
+          form.setValue(name as any, formatted, { shouldDirty: false });
+        }
+      }
+    }
+    // Run after the reset above has populated the fields.
+  }, [initialData]);
+
+  // --- Original ordonnance upload (image or PDF) -------------------------
+  // The chosen file is read as a base64 data URL and stored in `scanned_url`
+  // (same storage strategy as the portefeuille files). ~4 MB cap keeps the
+  // row small enough for both the SQLite and Supabase backends.
+  const MAX_SCAN_BYTES = 4 * 1024 * 1024;
+  const scannedUrl = form.watch('scannedUrl');
+  const scannedName = form.watch('scannedName');
+
+  const handleScanUpload = (file?: File | null) => {
+    if (!file) return;
+    if (file.size > MAX_SCAN_BYTES) {
+      toast.error('Fichier trop volumineux (max 4 Mo)');
+      return;
+    }
+    const okType = file.type.startsWith('image/') || file.type === 'application/pdf';
+    if (!okType) {
+      toast.error('Format non supporté (image ou PDF uniquement)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      form.setValue('scannedUrl', String(reader.result || ''), { shouldDirty: true });
+      form.setValue('scannedName', file.name, { shouldDirty: true });
+    };
+    reader.onerror = () => toast.error('Erreur de lecture du fichier');
+    reader.readAsDataURL(file);
+  };
+
+  const clearScan = () => {
+    form.setValue('scannedUrl', '', { shouldDirty: true });
+    form.setValue('scannedName', '', { shouldDirty: true });
+  };
 
   async function onSubmit(data: PrescriptionFormValues) {
     try {
@@ -453,6 +571,8 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
         og_indice_vp: data.ogIndiceVp || null,
         verre_traitement: data.verreTraitement || null,
         statut: data.statut || 'active',
+        scanned_url: data.scannedUrl || null,
+        scanned_name: data.scannedName || null,
       };
 
       let result;
@@ -502,11 +622,11 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
           <div className="grid grid-cols-2 gap-2">
             <FormField control={form.control} name={`odSph${suffix}` as any} render={({ field }) => (
               <FormItem><FormLabel className="text-xs">{sphLabel}</FormLabel>
-                <FormControl><Input type="number" step="0.25" placeholder="0.00" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} /></FormControl></FormItem>
+                <FormControl><Input placeholder="0.00" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
             )} />
             <FormField control={form.control} name={`odCyl${suffix}` as any} render={({ field }) => (
               <FormItem><FormLabel className="text-xs">Cylindre</FormLabel>
-                <FormControl><Input type="number" step="0.25" placeholder="0.00" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} /></FormControl></FormItem>
+                <FormControl><Input placeholder="0.00" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
             )} />
             <FormField control={form.control} name={`odAxe${suffix}` as any} render={({ field }) => (
               <FormItem><FormLabel className="text-xs">Axe</FormLabel>
@@ -590,11 +710,11 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
           <div className="grid grid-cols-2 gap-2">
             <FormField control={form.control} name={`ogSph${suffix}` as any} render={({ field }) => (
               <FormItem><FormLabel className="text-xs">{sphLabel}</FormLabel>
-                <FormControl><Input type="number" step="0.25" placeholder="0.00" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} /></FormControl></FormItem>
+                <FormControl><Input placeholder="0.00" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
             )} />
             <FormField control={form.control} name={`ogCyl${suffix}` as any} render={({ field }) => (
               <FormItem><FormLabel className="text-xs">Cylindre</FormLabel>
-                <FormControl><Input type="number" step="0.25" placeholder="0.00" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} /></FormControl></FormItem>
+                <FormControl><Input placeholder="0.00" readOnly={ro} className={'h-10 rounded-xl ' + roInput} {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
             )} />
             <FormField control={form.control} name={`ogAxe${suffix}` as any} render={({ field }) => (
               <FormItem><FormLabel className="text-xs">Axe</FormLabel>
@@ -860,14 +980,14 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
                   <FormField control={form.control} name={(sourceIsVl ? 'odAddVl' : 'odAddVp') as any} render={({ field: addField }) => (
                     <FormItem>
                       <FormControl>
-                        <Input type="number" step="0.25" placeholder="Add. OD" className="h-12 w-28 rounded-xl border-border/50 dark:bg-slate-950/50 dark:border-white/10" {...addField} />
+                        <Input placeholder="Add. OD" className="h-12 w-28 rounded-xl border-border/50 dark:bg-slate-950/50 dark:border-white/10" {...addField} {...signedFieldProps(addField)} />
                       </FormControl>
                     </FormItem>
                   )} />
                   <FormField control={form.control} name={(sourceIsVl ? 'ogAddVl' : 'ogAddVp') as any} render={({ field: addField }) => (
                     <FormItem>
                       <FormControl>
-                        <Input type="number" step="0.25" placeholder="Add. OG" className="h-12 w-28 rounded-xl border-border/50 dark:bg-slate-950/50 dark:border-white/10" {...addField} />
+                        <Input placeholder="Add. OG" className="h-12 w-28 rounded-xl border-border/50 dark:bg-slate-950/50 dark:border-white/10" {...addField} {...signedFieldProps(addField)} />
                       </FormControl>
                     </FormItem>
                   )} />
@@ -915,11 +1035,11 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
               {!isVpOnly ? (<>
               <FormField control={form.control} name="odSphVl" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Sphère VL</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="odCylVl" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Cylindre</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="odAxeVl" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Axe</FormLabel>
@@ -928,11 +1048,11 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
               </>) : (<>
               <FormField control={form.control} name="odSphVp" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Sphère VP</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="odCylVp" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Cylindre</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="odAxeVp" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Axe</FormLabel>
@@ -1004,11 +1124,11 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
               {!isVpOnly ? (<>
               <FormField control={form.control} name="ogSphVl" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Sphère VL</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="ogCylVl" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Cylindre</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="ogAxeVl" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Axe</FormLabel>
@@ -1017,11 +1137,11 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
               </>) : (<>
               <FormField control={form.control} name="ogSphVp" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Sphère VP</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="ogCylVp" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Cylindre</FormLabel>
-                  <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                  <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
               )} />
               <FormField control={form.control} name="ogAxeVp" render={({ field }) => (
                 <FormItem><FormLabel className="text-xs">Axe</FormLabel>
@@ -1100,11 +1220,11 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
               <div className="grid grid-cols-2 gap-2">
                 <FormField control={form.control} name="odSphProg" render={({ field }) => (
                   <FormItem><FormLabel className="text-xs">Sphère VL</FormLabel>
-                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                    <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="odCylProg" render={({ field }) => (
                   <FormItem><FormLabel className="text-xs">Cylindre</FormLabel>
-                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                    <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="odAxeProg" render={({ field }) => (
                   <FormItem><FormLabel className="text-xs">Axe</FormLabel>
@@ -1112,7 +1232,7 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
                 )} />
                 <FormField control={form.control} name="odAddProg" render={({ field }) => (
                   <FormItem><FormLabel className="text-xs">Addition</FormLabel>
-                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                    <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
                 )} />
               </div>
               {/* AV */}
@@ -1178,11 +1298,11 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
               <div className="grid grid-cols-2 gap-2">
                 <FormField control={form.control} name="ogSphProg" render={({ field }) => (
                   <FormItem><FormLabel className="text-xs">Sphère VL</FormLabel>
-                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                    <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="ogCylProg" render={({ field }) => (
                   <FormItem><FormLabel className="text-xs">Cylindre</FormLabel>
-                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                    <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
                 )} />
                 <FormField control={form.control} name="ogAxeProg" render={({ field }) => (
                   <FormItem><FormLabel className="text-xs">Axe</FormLabel>
@@ -1190,7 +1310,7 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
                 )} />
                 <FormField control={form.control} name="ogAddProg" render={({ field }) => (
                   <FormItem><FormLabel className="text-xs">Addition</FormLabel>
-                    <FormControl><Input type="number" step="0.25" placeholder="0.00" className="h-10 rounded-xl" {...field} /></FormControl></FormItem>
+                    <FormControl><Input placeholder="0.00" className="h-10 rounded-xl" {...field} {...signedFieldProps(field)} /></FormControl></FormItem>
                 )} />
               </div>
               {/* AV */}
@@ -1365,12 +1485,22 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
             above, formatted with +/- like the printed ordonnance. */}
         {(() => {
           const w = form.watch();
-          // Build the (sph / cyl / axe / add) row for one eye+mode.
+          // Build the (sph / cyl / axe / add) row for one eye+mode. `add` holds
+          // the Addition normally, but for a unifocal (Unifocal) ordonnance the
+          // last column shows the Indice (plain number) instead.
+          const fmtIndice = (v: any) => (v == null || v === '' ? '—' : String(v));
           const row = (sph: any, cyl: any, axe: any, add: any) => ({
             sph: fmtDiopter(sph, '—'),
             cyl: fmtDiopter(cyl, '—'),
             axe: fmtAxe(axe, '—'),
             add: fmtDiopter(add, '—'),
+          });
+          // For unifocal, the last column is the Indice per eye/section.
+          const rowIndice = (sph: any, cyl: any, axe: any, indice: any) => ({
+            sph: fmtDiopter(sph, '—'),
+            cyl: fmtDiopter(cyl, '—'),
+            axe: fmtAxe(axe, '—'),
+            add: fmtIndice(indice),
           });
           // Sections to render depending on the selected Type de vision.
           const sections: { title: string; od: any; og: any }[] = [];
@@ -1383,13 +1513,13 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
           } else if (isProgressif) {
             sections.push({
               title: 'Vision de loin',
-              od: row(w.odSphVl, w.odCylVl, w.odAxeVl, w.odAddVl),
-              og: row(w.ogSphVl, w.ogCylVl, w.ogAxeVl, w.ogAddVl),
+              od: rowIndice(w.odSphVl, w.odCylVl, w.odAxeVl, w.odIndiceVl),
+              og: rowIndice(w.ogSphVl, w.ogCylVl, w.ogAxeVl, w.ogIndiceVl),
             });
             sections.push({
               title: 'Vision de près',
-              od: row(w.odSphVp, w.odCylVp, w.odAxeVp, w.odAddVp),
-              og: row(w.ogSphVp, w.ogCylVp, w.ogAxeVp, w.ogAddVp),
+              od: rowIndice(w.odSphVp, w.odCylVp, w.odAxeVp, w.odIndiceVp),
+              og: rowIndice(w.ogSphVp, w.ogCylVp, w.ogAxeVp, w.ogIndiceVp),
             });
           } else if (isVpOnly) {
             sections.push({
@@ -1419,7 +1549,7 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
                             <th className="py-1 px-3 text-center font-medium">Sphère</th>
                             <th className="py-1 px-3 text-center font-medium">Cylindre</th>
                             <th className="py-1 px-3 text-center font-medium">Axe</th>
-                            <th className="py-1 px-3 text-center font-medium">Addition</th>
+                            <th className="py-1 px-3 text-center font-medium">{isProgressif ? 'Indice' : 'Addition'}</th>
                           </tr>
                         </thead>
                         <tbody className="font-mono">
@@ -1452,6 +1582,45 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
             <FormMessage />
           </FormItem>
         )} />
+
+        {/* Original ordonnance upload (image or PDF) */}
+        <div className="space-y-2">
+          <FormLabel>Ordonnance originale (image ou PDF)</FormLabel>
+          {scannedUrl ? (
+            <div className="flex items-center gap-4 rounded-xl border border-border/50 bg-slate-50/60 p-3 dark:border-white/10 dark:bg-slate-950/40">
+              {scannedUrl.startsWith('data:image/') || /^https?:.*\.(png|jpe?g|webp|gif)$/i.test(scannedUrl) ? (
+                <img src={scannedUrl} alt="Ordonnance" className="h-20 w-20 rounded-lg border border-border/50 object-cover" />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-lg border border-border/50 bg-white dark:bg-slate-900">
+                  <FileText className="h-8 w-8 text-sky-500" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{scannedName || 'Ordonnance jointe'}</p>
+                <div className="mt-2 flex gap-2">
+                  <a href={scannedUrl} target="_blank" rel="noreferrer">
+                    <Button type="button" variant="outline" size="sm" className="h-8 rounded-lg">Voir</Button>
+                  </a>
+                  <Button type="button" variant="ghost" size="sm" className="h-8 rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50" onClick={clearScan}>
+                    <X className="mr-1 h-3.5 w-3.5" /> Retirer
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border/60 bg-slate-50/50 p-6 text-center transition-colors hover:border-sky-400 hover:bg-sky-50/40 dark:border-white/10 dark:bg-slate-950/40 dark:hover:border-sky-500/40">
+              <UploadCloud className="h-7 w-7 text-slate-400" />
+              <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Cliquez pour joindre l'ordonnance originale</span>
+              <span className="text-xs text-muted-foreground">Image (PNG, JPG…) ou PDF — max 4 Mo</span>
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={(e) => { handleScanUpload(e.target.files?.[0]); e.target.value = ''; }}
+              />
+            </label>
+          )}
+        </div>
 
         <div className="flex justify-end pt-4 border-t dark:border-white/10">
           <Button type="submit" className="bg-amber-500 hover:bg-amber-600 text-white font-semibold px-6 h-12 rounded-[4px] shadow-none">

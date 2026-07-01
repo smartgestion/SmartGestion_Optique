@@ -293,6 +293,10 @@ export function FacturesList() {
           montantTtc: Number(l.montant_ttc || 0),
           prixOdHt: l.prix_od_ht ?? '',
           prixOgHt: l.prix_og_ht ?? '',
+          vlSelected: !!Number(l.vl_selected ?? 0),
+          vpSelected: !!Number(l.vp_selected ?? 0),
+          prixVl: l.prix_vl ?? '',
+          prixVp: l.prix_vp ?? '',
           prescriptionId: l.prescription_id ? String(l.prescription_id) : '',
         };
       });

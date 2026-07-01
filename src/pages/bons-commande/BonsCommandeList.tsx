@@ -291,6 +291,10 @@ export function BonsCommandeList() {
           tva: Number(l.tva || 20),
           montantHt: Number(l.montant_ht || 0),
           montantTtc: Number(l.montant_ttc || 0),
+          vlSelected: l.vl_selected ?? 0,
+          vpSelected: l.vp_selected ?? 0,
+          prixVl: l.prix_vl ?? 0,
+          prixVp: l.prix_vp ?? 0,
         })),
       };
 
@@ -363,6 +367,10 @@ export function BonsCommandeList() {
           montant_ht: l.montant_ht,
           montantTtc: l.montant_ttc,
           montant_ttc: l.montant_ttc,
+          vl_selected: l.vl_selected ?? 0,
+          vp_selected: l.vp_selected ?? 0,
+          prix_vl: l.prix_vl ?? null,
+          prix_vp: l.prix_vp ?? null,
         })),
       };
       setSelectedBon(mappedBon);

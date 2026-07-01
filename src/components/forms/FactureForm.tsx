@@ -7,6 +7,7 @@ import { Plus, Trash2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
@@ -21,6 +22,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { updateStockAndNotify, ensureLowStockNotifications } from '@/lib/notifications'
 import { HtCalculatorButton } from '@/components/shared/HtCalculator'
+import { ProductCombobox } from '@/components/ui/ProductCombobox'
 
 interface FactureFormProps {
   initialData?: any;
@@ -50,6 +52,11 @@ export function FactureForm({ initialData, onSuccess }: FactureFormProps) {
     prescriptionId: z.string().optional(),
     prixOdHt: z.coerce.number().optional(),
     prixOgHt: z.coerce.number().optional(),
+    // Unifocal (Unifocal) VL/VP split — per-line selection + price of each side.
+    vlSelected: z.boolean().optional(),
+    vpSelected: z.boolean().optional(),
+    prixVl: z.coerce.number().optional(),
+    prixVp: z.coerce.number().optional(),
   });
 
   const factureSchema = z.object({
@@ -126,6 +133,10 @@ export function FactureForm({ initialData, onSuccess }: FactureFormProps) {
               prescriptionId: l.prescriptionId?.toString() || '',
               prixOdHt: l.prixOdHt ?? l.prix_od_ht ?? '',
               prixOgHt: l.prixOgHt ?? l.prix_og_ht ?? '',
+              vlSelected: !!Number(l.vlSelected ?? l.vl_selected ?? 0),
+              vpSelected: !!Number(l.vpSelected ?? l.vp_selected ?? 0),
+              prixVl: l.prixVl ?? l.prix_vl ?? '',
+              prixVp: l.prixVp ?? l.prix_vp ?? '',
             })) || [],
           });
         } else if (parametresData?.[0]) {
@@ -148,6 +159,10 @@ export function FactureForm({ initialData, onSuccess }: FactureFormProps) {
   const watchClientId = form.watch('clientId');
   const watchPrescriptionId = form.watch('prescriptionId');
   const [selectedPrescription, setSelectedPrescription] = useState<any>(null);
+  // A "Unifocal" ordonnance (internal type_vision === 'progressif') carries both
+  // a VL and a VP refraction, so the verre line is split into VL/VP with a
+  // checkbox + price per side instead of the OD/OG price pair.
+  const isUnifocal = isOptique && selectedPrescription?.type_vision === 'progressif';
 
   // Fetch prescriptions when client changes — nothing is shown until a client
   // is selected, and only that client's active ordonnances are listed.
@@ -174,6 +189,19 @@ export function FactureForm({ initialData, onSuccess }: FactureFormProps) {
       setSelectedPrescription(null);
     }
   }, [watchPrescriptionId, prescriptions]);
+
+  // When the selected ordonnance is unifocal, default the verre line (index 1)
+  // to VL ticked if the user hasn't ticked anything yet, so at least one side
+  // is billed.
+  useEffect(() => {
+    if (isUnifocal) {
+      const vl = form.getValues('lignes.1.vlSelected');
+      const vp = form.getValues('lignes.1.vpSelected');
+      if (!vl && !vp) {
+        form.setValue('lignes.1.vlSelected', true, { shouldDirty: false });
+      }
+    }
+  }, [isUnifocal]);
 
   // When type changes to optique, set 2 lines (monture, verre); simple = 1 line
   useEffect(() => {
@@ -297,6 +325,11 @@ export function FactureForm({ initialData, onSuccess }: FactureFormProps) {
         montant_ttc: (Number(ligne.prixUnitaireHt || 0) * Number(ligne.quantite || 1)) * (1 + Number(ligne.tva || 20) / 100) || 0,
         prix_od_ht: data.type === 'optique' ? (ligne.prixOdHt || null) : null,
         prix_og_ht: data.type === 'optique' ? (ligne.prixOgHt || null) : null,
+        // Unifocal VL/VP split — only persisted on the optique verre line.
+        vl_selected: data.type === 'optique' && ligne.vlSelected ? 1 : 0,
+        vp_selected: data.type === 'optique' && ligne.vpSelected ? 1 : 0,
+        prix_vl: data.type === 'optique' && ligne.vlSelected ? (ligne.prixVl || 0) : null,
+        prix_vp: data.type === 'optique' && ligne.vpSelected ? (ligne.prixVp || 0) : null,
         prescription_id: (ligne.prescriptionId || (data.type === 'optique' && data.prescriptionId)) ? Number(ligne.prescriptionId || data.prescriptionId) : null,
         ordre: index,
       }));
@@ -540,7 +573,10 @@ export function FactureForm({ initialData, onSuccess }: FactureFormProps) {
                 // line so the user can add a lentille / autre product.
                 const isOptiqueExtraLine = isOptiqueMode && index >= 2;
                 const isVerreProduct = (selectedProduct?.type_produit || selectedProduct?.typeProduit) === 'verre';
-                const showOdOgPrices = isOptiqueVerreLine || (isVerreProduct && !isOptiqueMode);
+                // Unifocal ordonnance → the verre line shows a VL/VP split
+                // (checkbox + price per side) instead of the OD/OG price pair.
+                const showVlVpPrices = isOptiqueVerreLine && isUnifocal;
+                const showOdOgPrices = !showVlVpPrices && (isOptiqueVerreLine || (isVerreProduct && !isOptiqueMode));
 
                 // Filter products by type for optique mode
                 let filteredProduits = produits;
@@ -559,30 +595,14 @@ export function FactureForm({ initialData, onSuccess }: FactureFormProps) {
                   <React.Fragment key={field.id}>
                     <tr className={isOptiqueMode ? (isOptiqueMontureLine ? 'dark:bg-amber-500/5 bg-amber-50/30' : 'dark:bg-sky-500/5 bg-sky-50/30') : ''}>
                       <td className="p-2">
-                        <Select
-                          value={selectedProductId || ""}
+                        <ProductCombobox
+                          products={filteredProduits}
+                          value={selectedProductId || ''}
                           onValueChange={(val) => handleProduitSelect(index, val)}
-                        >
-                          <SelectTrigger className="h-9 dark:bg-slate-950/50 dark:border-white/10 bg-white border-slate-200">
-                            {selectedProductId ? (
-                              <span className={!selectedProduct ? 'text-orange-500' : ''}>
-                                {displayText}
-                              </span>
-                            ) : (
-                              <SelectValue placeholder={isOptiqueMontureLine ? 'Choisir une monture...' : isOptiqueVerreLine ? 'Choisir un verre...' : t('shared.form.choose_product')} />
-                            )}
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[400px] overflow-y-auto">
-                            {filteredProduits.length === 0 && (
-                              <SelectItem value="__none" disabled>Aucun produit disponible</SelectItem>
-                            )}
-                            {filteredProduits.map((p) => (
-                              <SelectItem key={p.id} value={p.id.toString()}>
-                                {p.nom || p.reference || '-'}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          placeholder={isOptiqueMontureLine ? 'Choisir une monture...' : isOptiqueVerreLine ? 'Choisir un verre...' : t('shared.form.choose_product')}
+                          emptyText="Aucun produit disponible"
+                          renderLabel={(p) => p.nom || p.reference || '-'}
+                        />
                       </td>
                       <td className="p-2">
                         <Input
@@ -599,7 +619,77 @@ export function FactureForm({ initialData, onSuccess }: FactureFormProps) {
                         />
                       </td>
                       <td className="p-2">
-                        {showOdOgPrices ? (
+                        {showVlVpPrices ? (
+                          <div className="space-y-1">
+                            {/* Unifocal: VL / VP checkbox + price per side.
+                                prixUnitaireHt is kept in sync with the ticked
+                                side(s) so the totals stay correct. */}
+                            {(() => {
+                              const vlOn = !!form.watch(`lignes.${index}.vlSelected`);
+                              const vpOn = !!form.watch(`lignes.${index}.vpSelected`);
+                              const recompute = (nextVl: boolean, nextVp: boolean) => {
+                                const vlP = parseFloat(String(form.watch(`lignes.${index}.prixVl`))) || 0;
+                                const vpP = parseFloat(String(form.watch(`lignes.${index}.prixVp`))) || 0;
+                                form.setValue(
+                                  `lignes.${index}.prixUnitaireHt`,
+                                  (nextVl ? vlP : 0) + (nextVp ? vpP : 0),
+                                  { shouldValidate: true, shouldDirty: true }
+                                );
+                              };
+                              return (
+                                <>
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox
+                                      checked={vlOn}
+                                      onCheckedChange={(v) => {
+                                        form.setValue(`lignes.${index}.vlSelected`, !!v, { shouldDirty: true });
+                                        recompute(!!v, vpOn);
+                                      }}
+                                    />
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      placeholder="Prix VL"
+                                      disabled={!vlOn}
+                                      className="h-9 text-right dark:bg-amber-500/5 dark:border-amber-500/30 bg-amber-50 border-amber-200 text-xs"
+                                      {...form.register(`lignes.${index}.prixVl`, { valueAsNumber: true })}
+                                      onChange={(e) => {
+                                        const v = parseFloat(e.target.value) || 0;
+                                        form.setValue(`lignes.${index}.prixVl`, v);
+                                        const vpP = parseFloat(String(form.watch(`lignes.${index}.prixVp`))) || 0;
+                                        form.setValue(`lignes.${index}.prixUnitaireHt`, (vlOn ? v : 0) + (vpOn ? vpP : 0));
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox
+                                      checked={vpOn}
+                                      onCheckedChange={(v) => {
+                                        form.setValue(`lignes.${index}.vpSelected`, !!v, { shouldDirty: true });
+                                        recompute(vlOn, !!v);
+                                      }}
+                                    />
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      placeholder="Prix VP"
+                                      disabled={!vpOn}
+                                      className="h-9 text-right dark:bg-sky-500/5 dark:border-sky-500/30 bg-sky-50 border-sky-200 text-xs"
+                                      {...form.register(`lignes.${index}.prixVp`, { valueAsNumber: true })}
+                                      onChange={(e) => {
+                                        const v = parseFloat(e.target.value) || 0;
+                                        form.setValue(`lignes.${index}.prixVp`, v);
+                                        const vlP = parseFloat(String(form.watch(`lignes.${index}.prixVl`))) || 0;
+                                        form.setValue(`lignes.${index}.prixUnitaireHt`, (vlOn ? vlP : 0) + (vpOn ? v : 0));
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 dark:text-slate-400 text-right">VL / VP (unifocal)</div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        ) : showOdOgPrices ? (
                           <div className="space-y-1">
                             <Input
                               type="number"

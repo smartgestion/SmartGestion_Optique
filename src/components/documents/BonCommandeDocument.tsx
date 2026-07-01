@@ -115,6 +115,15 @@ function OptiqueBonCommandeDocument({ bon, entreprise, lang }: { bon: any; entre
 
   const verrePrix = pickNum(verreLigne, 'prixUnitaireHt', 'prix_unitaire_ht', 'montantHt', 'montant_ht')
   const verreQte = safeNum(verreLigne.quantite, 1)
+
+  // Unifocal (Unifocal) VL/VP split — the verre line records which side(s)
+  // were ordered (vl_selected / vp_selected) and the price of each side
+  // (prix_vl / prix_vp). Only meaningful when the ordonnance is 'progressif'.
+  const isUnifocal = p.type_vision === 'progressif'
+  const lineVlSelected = !!safeNum(pickVal(verreLigne, 'vlSelected', 'vl_selected'), 0)
+  const lineVpSelected = !!safeNum(pickVal(verreLigne, 'vpSelected', 'vp_selected'), 0)
+  const prixVl = pickNum(verreLigne, 'prixVl', 'prix_vl')
+  const prixVp = pickNum(verreLigne, 'prixVp', 'prix_vp')
   const verreType = p.verre_type || ''
   const verreIndice = p.verre_indice ?? ''
   const verreTraitement = formatTraitement(p.verre_traitement)
@@ -135,17 +144,19 @@ function OptiqueBonCommandeDocument({ bon, entreprise, lang }: { bon: any; entre
   const odRecap = formatSphCyl(p.od_sph_vl, p.od_cyl_vl, p.od_axe_vl) || formatSphCyl(p.od_sph_vp, p.od_cyl_vp, p.od_axe_vp)
   const ogRecap = formatSphCyl(p.og_sph_vl, p.og_cyl_vl, p.og_axe_vl) || formatSphCyl(p.og_sph_vp, p.og_cyl_vp, p.og_axe_vp)
 
-  // Prescription rows — Sph / Cyl / Axe / Add for both vision groups.
+  // Prescription rows — Sph / Cyl / Axe / Add for both vision groups. For a
+  // unifocal (Unifocal) ordonnance the 4th column shows the Indice per
+  // eye/section instead of the Addition (Add).
   const rows = [
     {
       eye: 'OD',
-      vl: [p.od_sph_vl, p.od_cyl_vl, p.od_axe_vl, p.od_add_vl],
-      vp: [p.od_sph_vp, p.od_cyl_vp, p.od_axe_vp, p.od_add_vp],
+      vl: [p.od_sph_vl, p.od_cyl_vl, p.od_axe_vl, isUnifocal ? p.od_indice_vl : p.od_add_vl],
+      vp: [p.od_sph_vp, p.od_cyl_vp, p.od_axe_vp, isUnifocal ? p.od_indice_vp : p.od_add_vp],
     },
     {
       eye: 'OG',
-      vl: [p.og_sph_vl, p.og_cyl_vl, p.og_axe_vl, p.og_add_vl],
-      vp: [p.og_sph_vp, p.og_cyl_vp, p.og_axe_vp, p.og_add_vp],
+      vl: [p.og_sph_vl, p.og_cyl_vl, p.og_axe_vl, isUnifocal ? p.og_indice_vl : p.og_add_vl],
+      vp: [p.og_sph_vp, p.og_cyl_vp, p.og_axe_vp, isUnifocal ? p.og_indice_vp : p.og_add_vp],
     },
   ]
 
@@ -166,9 +177,14 @@ function OptiqueBonCommandeDocument({ bon, entreprise, lang }: { bon: any; entre
   } else if (p.type_vision === 'vp') {
     showVl = false; showVp = true
   } else if (p.type_vision === 'progressif') {
-    showVl = vlFilled; showVp = vpFilled
-    // If nothing was detected as filled, fall back to showing both.
-    if (!showVl && !showVp) { showVl = true; showVp = true }
+    // Unifocal: honour the per-line VL/VP checkboxes when set; otherwise fall
+    // back to whichever side(s) the ordonnance actually filled.
+    if (lineVlSelected || lineVpSelected) {
+      showVl = lineVlSelected; showVp = lineVpSelected
+    } else {
+      showVl = vlFilled; showVp = vpFilled
+      if (!showVl && !showVp) { showVl = true; showVp = true }
+    }
   } else {
     showVl = true; showVp = true
   }
@@ -287,13 +303,13 @@ function OptiqueBonCommandeDocument({ bon, entreprise, lang }: { bon: any; entre
                     <th style={thMini}>Sph</th>
                     <th style={thMini}>Cyl</th>
                     <th style={thMini}>Axe</th>
-                    <th style={thMini}>Add</th>
+                    <th style={thMini}>{isUnifocal ? 'Indice' : 'Add'}</th>
                   </>}
                   {showVp && <>
                     <th style={{ ...thMini, ...(showVl ? { borderLeft: `0.5pt solid ${C.borderSoft}` } : null) }}>Sph</th>
                     <th style={thMini}>Cyl</th>
                     <th style={thMini}>Axe</th>
-                    <th style={thMini}>Add</th>
+                    <th style={thMini}>{isUnifocal ? 'Indice' : 'Add'}</th>
                   </>}
                 </tr>
               </thead>
@@ -302,10 +318,10 @@ function OptiqueBonCommandeDocument({ bon, entreprise, lang }: { bon: any; entre
                   <tr key={r.eye}>
                     <td style={{ ...tdMini, fontWeight: 700, color: C.title }}>{r.eye}</td>
                     {showVl && r.vl.map((v, i) => (
-                      <td key={`vl-${i}`} style={{ ...tdMini, ...(i === 0 ? { fontWeight: 700 } : null) }}>{fmtCell(v, i === 2)}</td>
+                      <td key={`vl-${i}`} style={{ ...tdMini, ...(i === 0 ? { fontWeight: 700 } : null) }}>{isUnifocal && i === 3 ? (v == null || v === '' ? '-' : String(v)) : fmtCell(v, i === 2)}</td>
                     ))}
                     {showVp && r.vp.map((v, i) => (
-                      <td key={`vp-${i}`} style={{ ...tdMini, ...(i === 0 ? { ...(showVl ? { borderLeft: `0.5pt solid ${C.borderSoft}` } : null), fontWeight: 700 } : null) }}>{fmtCell(v, i === 2)}</td>
+                      <td key={`vp-${i}`} style={{ ...tdMini, ...(i === 0 ? { ...(showVl ? { borderLeft: `0.5pt solid ${C.borderSoft}` } : null), fontWeight: 700 } : null) }}>{isUnifocal && i === 3 ? (v == null || v === '' ? '-' : String(v)) : fmtCell(v, i === 2)}</td>
                     ))}
                   </tr>
                 ))}
@@ -323,6 +339,28 @@ function OptiqueBonCommandeDocument({ bon, entreprise, lang }: { bon: any; entre
             )}
             <span> — PU HT: {fmt2Money(verrePrix)} DH × {verreQte}</span>
           </div>
+
+          {/* ===== UNIFOCAL VL / VP PRICE BREAKDOWN ===== */}
+          {isUnifocal && (showVl || showVp) && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+              <table style={{ borderCollapse: 'collapse', fontSize: '9pt', width: 320 }}>
+                <tbody>
+                  {showVl && (
+                    <tr>
+                      <td style={{ padding: '6px 12px', textAlign: 'left', color: C.text, borderBottom: `0.5pt solid ${C.borderSoft}` }}>VL (Vision de Loin)</td>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', color: C.text, fontWeight: 700, borderBottom: `0.5pt solid ${C.borderSoft}` }}>{fmt2Money(prixVl)} DH</td>
+                    </tr>
+                  )}
+                  {showVp && (
+                    <tr>
+                      <td style={{ padding: '6px 12px', textAlign: 'left', color: C.text, borderBottom: `0.5pt solid ${C.borderSoft}` }}>VP (Vision de Près)</td>
+                      <td style={{ padding: '6px 12px', textAlign: 'right', color: C.text, fontWeight: 700, borderBottom: `0.5pt solid ${C.borderSoft}` }}>{fmt2Money(prixVp)} DH</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Push totals + footer to the bottom of the page */}
           <div style={{ flex: 1 }} />

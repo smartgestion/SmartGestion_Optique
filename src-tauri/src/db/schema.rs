@@ -712,8 +712,9 @@ pub const MIGRATIONS: &[&str] = &[
         -- Progressif: which vision section ('vl' | 'vp') is the source
         progressif_source           TEXT,
 
-        -- Scan de l'ordonnance
+        -- Scan de l'ordonnance (base64 data URL) + nom de fichier d'origine
         scanned_url                 TEXT,
+        scanned_name                TEXT,
 
         statut                      TEXT    DEFAULT 'active',
         created_at                  TEXT    DEFAULT CURRENT_TIMESTAMP,

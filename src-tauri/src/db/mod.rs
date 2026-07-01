@@ -216,6 +216,12 @@ fn apply_migrations(conn: &Connection) -> DbResult<()> {
         add_column_if_missing(conn, "facture_lignes", "od_og",           "TEXT")?;
         add_column_if_missing(conn, "facture_lignes", "prix_od_ht",      "REAL")?;
         add_column_if_missing(conn, "facture_lignes", "prix_og_ht",      "REAL")?;
+        // facture_lignes — unifocal (Unifocal) VL/VP split: which vision
+        // side(s) are billed and the price of each side.
+        add_column_if_missing(conn, "facture_lignes", "vl_selected", "INTEGER DEFAULT 0")?;
+        add_column_if_missing(conn, "facture_lignes", "vp_selected", "INTEGER DEFAULT 0")?;
+        add_column_if_missing(conn, "facture_lignes", "prix_vl",     "REAL")?;
+        add_column_if_missing(conn, "facture_lignes", "prix_vp",     "REAL")?;
 
         // prescriptions — independent "Vision de près" (VP) Nature AV & Prisme
         // columns (so Progressif VL/VP don't share the same values).
@@ -252,6 +258,11 @@ fn apply_migrations(conn: &Connection) -> DbResult<()> {
         add_column_if_missing(conn, "prescriptions", "og_axe_prog",             "INTEGER")?;
         add_column_if_missing(conn, "prescriptions", "og_add_prog",             "REAL")?;
 
+        // prescriptions — original ordonnance scan/photo. `scanned_url` holds a
+        // base64 data URL (image or PDF); `scanned_name` the original filename.
+        add_column_if_missing(conn, "prescriptions", "scanned_url",  "TEXT")?;
+        add_column_if_missing(conn, "prescriptions", "scanned_name", "TEXT")?;
+
         // bons_commande — Verre Commande (optical) fields
         add_column_if_missing(conn, "bons_commande", "type",      "TEXT DEFAULT 'simple'")?;
         add_column_if_missing(conn, "bons_commande", "client_id", "INTEGER")?;
@@ -261,6 +272,12 @@ fn apply_migrations(conn: &Connection) -> DbResult<()> {
         add_column_if_missing(conn, "bons_commande", "motif_annulation", "TEXT")?;
         // bon_commande_lignes — linked prescription for verre orders
         add_column_if_missing(conn, "bon_commande_lignes", "prescription_id", "INTEGER")?;
+        // bon_commande_lignes — unifocal (Unifocal) VL/VP split: which vision
+        // side(s) are ordered and the price of each side.
+        add_column_if_missing(conn, "bon_commande_lignes", "vl_selected", "INTEGER DEFAULT 0")?;
+        add_column_if_missing(conn, "bon_commande_lignes", "vp_selected", "INTEGER DEFAULT 0")?;
+        add_column_if_missing(conn, "bon_commande_lignes", "prix_vl",     "REAL")?;
+        add_column_if_missing(conn, "bon_commande_lignes", "prix_vp",     "REAL")?;
 
         // avoirs_fournisseur — avoir type (simple/verre, mirrors BC type) and
         // creation mode ('manuel' or 'auto' when generated from a BC cancellation).

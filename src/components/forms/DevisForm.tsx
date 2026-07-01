@@ -20,6 +20,7 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { HtCalculatorButton } from '@/components/shared/HtCalculator'
+import { ProductCombobox } from '@/components/ui/ProductCombobox'
 
 interface DevisFormProps {
   initialData?: any;
@@ -366,25 +367,13 @@ export function DevisForm({ initialData, onSuccess }: DevisFormProps) {
                 return (
                   <tr key={field.id}>
                     <td className="p-2">
-                      <Select
-                        value={form.watch(`lignes.${index}.produitId`) || ""}
+                      <ProductCombobox
+                        products={produits}
+                        value={form.watch(`lignes.${index}.produitId`) || ''}
                         onValueChange={(val) => handleProduitSelect(index, val)}
-                      >
-                        <SelectTrigger className="h-9 dark:bg-slate-950/50 dark:border-white/10 bg-white border-slate-200">
-                          {(() => {
-                            const pid = form.watch(`lignes.${index}.produitId`);
-                            const p = pid ? produits.find(p2 => p2.id.toString() === pid) : null;
-                            return p ? <span>{p.designation || p.nom || '-'}</span> : <SelectValue placeholder={t('shared.form.choose_product')} />;
-                          })()}
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[400px] overflow-y-auto">
-                          {produits.map((p) => (
-                            <SelectItem key={p.id} value={p.id.toString()}>
-                              {p.designation || p.nom || p.reference || '-'}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder={t('shared.form.choose_product')}
+                        renderLabel={(p) => p.designation || p.nom || p.reference || '-'}
+                      />
                     </td>
                     <td className="p-2">
                       <Input

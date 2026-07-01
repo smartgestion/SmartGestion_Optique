@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useReactToPrint } from 'react-to-print'
 import {
-  Plus, Search, FileEdit, Trash2, Eye, ArrowLeft, ChevronLeft, ChevronRight, AlertCircle
+  Plus, Search, FileEdit, Trash2, Eye, ArrowLeft, ChevronLeft, ChevronRight, AlertCircle, Printer
 } from 'lucide-react';
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { toast } from 'sonner'
 import { PrescriptionForm } from '@/components/forms/PrescriptionForm'
+import { PrescriptionDocument } from '@/components/documents/PrescriptionDocument'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
@@ -39,7 +41,7 @@ interface Prescription {
 const ITEMS_PER_PAGE = 10;
 
 export function PrescriptionsList() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,6 +51,74 @@ export function PrescriptionsList() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [prescriptionToDelete, setPrescriptionToDelete] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Printing / PDF of the ordonnance.
+  const [printingPrescription, setPrintingPrescription] = useState<any>(null);
+  const [entreprise, setEntreprise] = useState<any>(null);
+  const printRef = useRef<HTMLDivElement>(null);
+  const wasFullscreenRef = useRef(false);
+
+  const handlePrint = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: printingPrescription ? `Ordonnance_${printingPrescription.id}` : 'Ordonnance',
+    onBeforePrint: async () => { wasFullscreenRef.current = Boolean(document.fullscreenElement); },
+    onAfterPrint: () => {
+      setPrintingPrescription(null);
+      if (wasFullscreenRef.current && !document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().catch(() => {});
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (printingPrescription && printRef.current) {
+      handlePrint();
+    }
+  }, [printingPrescription, handlePrint]);
+
+  const fetchEntreprise = async () => {
+    if (!user?.id) return;
+    try {
+      const { data } = await supabase
+        .from('parametres')
+        .select('id,user_id,nom_societe,nom,adresse,ville,telephone,email,ice,if_number,patente,logo_url,couleur_principale,watermark_text,activer_filigrane')
+        .eq('user_id', String(user.id))
+        .maybeSingle();
+      if (!data) { setEntreprise(null); return; }
+      const cleanLogoUrl = !data.logo_url || data.logo_url === 'image.png' ? '' : data.logo_url;
+      setEntreprise({
+        nom: data.nom || data.nom_societe || '',
+        nomEntreprise: data.nom_societe || data.nom || '',
+        adresse: data.adresse || '',
+        ville: data.ville || '',
+        telephone: data.telephone || '',
+        email: data.email || '',
+        ice: data.ice || '',
+        ifNumber: (data as any).if_number || '',
+        patente: (data as any).patente || '',
+        logoUrl: cleanLogoUrl,
+        watermarkText: data.watermark_text || 'SmartGestion',
+        activerFiligrane: data.activer_filigrane !== undefined ? data.activer_filigrane : true,
+      });
+    } catch (error) {
+      console.warn('Failed to fetch entreprise:', error);
+    }
+  };
+
+  const handlePrintPrescription = async (id: number) => {
+    try {
+      toast.info('Préparation de l\'ordonnance...');
+      const { data, error } = await supabase
+        .from('prescriptions')
+        .select('*, client:clients(*)')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      setPrintingPrescription(data);
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur de chargement de l\'ordonnance');
+    }
+  };
 
   const fetchPrescriptions = async () => {
     if (!user?.id) {
@@ -107,7 +177,7 @@ export function PrescriptionsList() {
   };
 
   useEffect(() => {
-    if (user?.id) fetchPrescriptions();
+    if (user?.id) { fetchPrescriptions(); fetchEntreprise(); }
   }, [user?.id]);
 
   const handleDelete = async () => {
@@ -274,6 +344,11 @@ export function PrescriptionsList() {
                   </TableCell>
                   <TableCell className="px-4 py-4 text-right">
                     <div className="flex justify-end gap-0.5">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-[4px]"
+                        title="Imprimer l'ordonnance"
+                        onClick={() => handlePrintPrescription(p.id)}>
+                        <Printer className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-[4px]"
                         onClick={() => { setEditingPrescription(p); setShowForm(true); }}>
                         <FileEdit className="h-4 w-4" />
@@ -314,6 +389,19 @@ export function PrescriptionsList() {
       </Card>
         </>
       )}
+
+      {/* Hidden printable ordonnance — rendered off-screen and sent to the
+          native print dialog by react-to-print. */}
+      <div style={{ position: 'fixed', left: '-10000px', top: 0 }} aria-hidden>
+        {printingPrescription && (
+          <PrescriptionDocument
+            ref={printRef}
+            prescription={printingPrescription}
+            entreprise={entreprise}
+            lang={i18n.language}
+          />
+        )}
+      </div>
     </div>
   );
 }

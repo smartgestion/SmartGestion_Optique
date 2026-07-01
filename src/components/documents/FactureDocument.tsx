@@ -114,6 +114,15 @@ function OptiqueFactureDocument({ facture, entreprise, lang }: { facture: any; e
   const ogPrix = pickNum(verreLigne, 'prixOgHt', 'prix_og_ht')
   const monturePrix = pickNum(montureLigne, 'prixUnitaireHt', 'prix_unitaire_ht')
 
+  // Unifocal (Unifocal) VL/VP split — the verre line records which side(s)
+  // are billed (vl_selected / vp_selected) and the price of each side
+  // (prix_vl / prix_vp). Only meaningful when the ordonnance is 'progressif'.
+  const lineVlSelected = !!safeNum(pickVal(verreLigne, 'vlSelected', 'vl_selected'), 0)
+  const lineVpSelected = !!safeNum(pickVal(verreLigne, 'vpSelected', 'vp_selected'), 0)
+  const prixVl = pickNum(verreLigne, 'prixVl', 'prix_vl')
+  const prixVp = pickNum(verreLigne, 'prixVp', 'prix_vp')
+  const hasVlVpSplit = lineVlSelected || lineVpSelected
+
   // The ordonnance stores its OD/OG values in the *_vl columns and records
   // the user's choice in `type_vision` ('vl' = loin, 'vp' = près,
   // 'progressif' = both). Route the captured OD/OG into the box the user
@@ -137,6 +146,14 @@ function OptiqueFactureDocument({ facture, entreprise, lang }: { facture: any; e
   const vpOdAdd = fmtSph(p.od_add_vp)
   const vpOgAdd = fmtSph(p.og_add_vp)
 
+  // Indice (refractive index) per eye/section — shown instead of the Addition
+  // for a unifocal (Unifocal) ordonnance. Plain numbers, not diopters.
+  const fmtIndice = (v: any) => (v == null || v === '' ? '' : String(v))
+  const vlOdIndice = fmtIndice(p.od_indice_vl)
+  const vlOgIndice = fmtIndice(p.og_indice_vl)
+  const vpOdIndice = fmtIndice(p.od_indice_vp)
+  const vpOgIndice = fmtIndice(p.og_indice_vp)
+
   const visionTypeLabel = isProgressif ? 'Progressif' : isVp ? 'Vision de près' : p.type_vision === 'vl' ? 'Vision de loin' : ''
 
   // Which vision box(es) to display, driven by the selected vision type:
@@ -146,9 +163,15 @@ function OptiqueFactureDocument({ facture, entreprise, lang }: { facture: any; e
   let showVl: boolean
   let showVp: boolean
   if (isProgressif) {
-    showVl = !!(vlOd || vlOg || vlOdAdd || vlOgAdd)
-    showVp = !!(vpOd || vpOg || vpOdAdd || vpOgAdd)
-    if (!showVl && !showVp) { showVl = true; showVp = true }
+    // Unifocal: honour the per-line VL/VP checkboxes when the user made a
+    // choice; otherwise fall back to whichever side(s) were filled.
+    if (hasVlVpSplit) {
+      showVl = lineVlSelected; showVp = lineVpSelected
+    } else {
+      showVl = !!(vlOd || vlOg || vlOdAdd || vlOgAdd)
+      showVp = !!(vpOd || vpOg || vpOdAdd || vpOgAdd)
+      if (!showVl && !showVp) { showVl = true; showVp = true }
+    }
   } else if (isVp) {
     showVl = false; showVp = true
   } else if (p.type_vision === 'vl') {
@@ -224,8 +247,8 @@ function OptiqueFactureDocument({ facture, entreprise, lang }: { facture: any; e
                     <div><strong>OG :</strong> {vlOg || '/'}</div>
                     {isProgressif && (
                       <>
-                        <div><strong>ADD OD :</strong> {vlOdAdd || '/'}</div>
-                        <div><strong>ADD OG :</strong> {vlOgAdd || '/'}</div>
+                        <div><strong>Indice OD :</strong> {vlOdIndice || '/'}</div>
+                        <div><strong>Indice OG :</strong> {vlOgIndice || '/'}</div>
                       </>
                     )}
                   </td>
@@ -237,8 +260,8 @@ function OptiqueFactureDocument({ facture, entreprise, lang }: { facture: any; e
                     <div><strong>OG :</strong> {vpOg || '/'}</div>
                     {isProgressif && (
                       <>
-                        <div><strong>ADD OD :</strong> {vpOdAdd || '/'}</div>
-                        <div><strong>ADD OG :</strong> {vpOgAdd || '/'}</div>
+                        <div><strong>Indice OD :</strong> {vpOdIndice || '/'}</div>
+                        <div><strong>Indice OG :</strong> {vpOgIndice || '/'}</div>
                       </>
                     )}
                   </td>
@@ -260,14 +283,33 @@ function OptiqueFactureDocument({ facture, entreprise, lang }: { facture: any; e
                     <span>Monture</span>
                     <span>{monturePrix > 0 ? `${fmt2(monturePrix)} MAD` : '-'}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span>Verre OD</span>
-                    <span>{odPrix > 0 ? `${fmt2(odPrix)} MAD` : '-'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span>Verre OG</span>
-                    <span>{ogPrix > 0 ? `${fmt2(ogPrix)} MAD` : '-'}</span>
-                  </div>
+                  {hasVlVpSplit ? (
+                    <>
+                      {lineVlSelected && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                          <span>Verre VL</span>
+                          <span>{`${fmt2(prixVl)} MAD`}</span>
+                        </div>
+                      )}
+                      {lineVpSelected && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                          <span>Verre VP</span>
+                          <span>{`${fmt2(prixVp)} MAD`}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <span>Verre OD</span>
+                        <span>{odPrix > 0 ? `${fmt2(odPrix)} MAD` : '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <span>Verre OG</span>
+                        <span>{ogPrix > 0 ? `${fmt2(ogPrix)} MAD` : '-'}</span>
+                      </div>
+                    </>
+                  )}
                 </td>
               </tr>
             </tbody>

@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ProductCombobox } from '@/components/ui/ProductCombobox'
 import { toast } from 'sonner'
 import { formatCurrency, fmtDiopter, fmtAxe } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
@@ -147,6 +148,9 @@ export function AvoirFournisseurForm({ onSuccess }: AvoirFournisseurFormProps) {
   const watchLignes = form.watch('lignes') || [];
   const verreProducts = produits.filter((p) => (p.type_produit || p.typeProduit) === 'verre');
   const selectedClient = clients.find((c) => c.id.toString() === clientId);
+  // A "Unifocal" ordonnance (internal type_vision === 'progressif') shows the
+  // refractive index (Indice) per eye/section instead of the Addition (Add).
+  const isUnifocal = selectedPrescription?.type_vision === 'progressif';
   // When a supplier is selected, narrow the BC list to that supplier's orders
   // (more relevant); otherwise show every confirmed/delivered BC.
   const bonsCommandeBC = fournisseurId && fournisseurId !== 'none'
@@ -546,22 +550,22 @@ export function AvoirFournisseurForm({ onSuccess }: AvoirFournisseurFormProps) {
                     <div className="text-slate-500">OD Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_sph_vl, '-')}</span></div>
                     <div className="text-slate-500">OD Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_cyl_vl, '-')}</span></div>
                     <div className="text-slate-500">OD Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.od_axe_vl, '-')}</span></div>
-                    <div className="text-slate-500">OD Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_add_vl, '-')}</span></div>
+                    <div className="text-slate-500">{isUnifocal ? 'OD Indice' : 'OD Add'}: <span className="font-mono font-semibold text-slate-800 dark:text-white">{isUnifocal ? (selectedPrescription.od_indice_vl ?? '-') : fmtDiopter(selectedPrescription.od_add_vl, '-')}</span></div>
                     <div className="text-slate-500">OG Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_sph_vl, '-')}</span></div>
                     <div className="text-slate-500">OG Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_cyl_vl, '-')}</span></div>
                     <div className="text-slate-500">OG Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.og_axe_vl, '-')}</span></div>
-                    <div className="text-slate-500">OG Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_add_vl, '-')}</span></div>
+                    <div className="text-slate-500">{isUnifocal ? 'OG Indice' : 'OG Add'}: <span className="font-mono font-semibold text-slate-800 dark:text-white">{isUnifocal ? (selectedPrescription.og_indice_vl ?? '-') : fmtDiopter(selectedPrescription.og_add_vl, '-')}</span></div>
                     {selectedPrescription.od_sph_vp != null && (
                       <>
                         <div className="col-span-2 md:col-span-4 font-semibold text-slate-600 dark:text-slate-400 border-b pb-1 mb-1 mt-2">Réfraction VP</div>
                         <div className="text-slate-500">OD Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_sph_vp, '-')}</span></div>
                         <div className="text-slate-500">OD Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_cyl_vp, '-')}</span></div>
                         <div className="text-slate-500">OD Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.od_axe_vp, '-')}</span></div>
-                        <div className="text-slate-500">OD Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_add_vp, '-')}</span></div>
+                        <div className="text-slate-500">{isUnifocal ? 'OD Indice' : 'OD Add'}: <span className="font-mono font-semibold text-slate-800 dark:text-white">{isUnifocal ? (selectedPrescription.od_indice_vp ?? '-') : fmtDiopter(selectedPrescription.od_add_vp, '-')}</span></div>
                         <div className="text-slate-500">OG Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_sph_vp, '-')}</span></div>
                         <div className="text-slate-500">OG Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_cyl_vp, '-')}</span></div>
                         <div className="text-slate-500">OG Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.og_axe_vp, '-')}</span></div>
-                        <div className="text-slate-500">OG Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_add_vp, '-')}</span></div>
+                        <div className="text-slate-500">{isUnifocal ? 'OG Indice' : 'OG Add'}: <span className="font-mono font-semibold text-slate-800 dark:text-white">{isUnifocal ? (selectedPrescription.og_indice_vp ?? '-') : fmtDiopter(selectedPrescription.og_add_vp, '-')}</span></div>
                       </>
                     )}
                     {(selectedPrescription.dp_binoculaire || selectedPrescription.dp_od || selectedPrescription.dp_og) && (
@@ -597,18 +601,15 @@ export function AvoirFournisseurForm({ onSuccess }: AvoirFournisseurFormProps) {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label className="text-slate-700 font-semibold dark:text-slate-300">Produit verre</Label>
-                    <Select value={verreProductId} onValueChange={handleVerreProductSelect}>
-                      <SelectTrigger className="bg-white border-slate-300 dark:bg-slate-950/50 dark:border-white/10">
-                        <SelectValue placeholder="Sélectionner un produit verre..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {verreProducts.map((p) => (
-                          <SelectItem key={p.id} value={p.id.toString()}>
-                            {p.designation || p.nom || 'Verre'} — {(p.reference || p.ref || '')}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <ProductCombobox
+                      products={verreProducts}
+                      value={verreProductId}
+                      onValueChange={handleVerreProductSelect}
+                      className="h-11"
+                      placeholder="Sélectionner un produit verre..."
+                      searchPlaceholder="Rechercher un verre..."
+                      renderLabel={(p) => `${p.designation || p.nom || 'Verre'} — ${p.reference || p.ref || ''}`}
+                    />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="space-y-2">
@@ -704,27 +705,13 @@ export function AvoirFournisseurForm({ onSuccess }: AvoirFournisseurFormProps) {
                 return (
                   <tr key={field.id}>
                     <td className="p-2">
-                      <Select
-                        value={selectedProductId || ""}
+                      <ProductCombobox
+                        products={produits}
+                        value={selectedProductId || ''}
                         onValueChange={(val) => handleProduitSelect(index, val)}
-                      >
-                        <SelectTrigger className="h-9 dark:bg-slate-950/50 dark:border-white/10 bg-white border-slate-200">
-                          {selectedProductId ? (
-                            <span className={!selectedProduct ? 'text-orange-500' : ''}>
-                              {displayText}
-                            </span>
-                          ) : (
-                            <SelectValue placeholder={t('shared.form.choose_product')} />
-                          )}
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[400px] overflow-y-auto">
-                          {produits.map((p) => (
-                            <SelectItem key={p.id} value={p.id.toString()}>
-                              {p.nom || p.reference || '-'}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder={t('shared.form.choose_product')}
+                        renderLabel={(p) => p.nom || p.reference || '-'}
+                      />
                     </td>
                     <td className="p-2">
                       <Input

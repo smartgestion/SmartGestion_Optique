@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ProductCombobox } from '@/components/ui/ProductCombobox'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
@@ -293,27 +294,13 @@ export function AvoirForm({ onSuccess }: AvoirFormProps) {
                 return (
                   <tr key={field.id}>
                     <td className="p-2">
-                      <Select
-                        value={selectedProductId || ""}
+                      <ProductCombobox
+                        products={produits}
+                        value={selectedProductId || ''}
                         onValueChange={(val) => handleProduitSelect(index, val)}
-                      >
-                        <SelectTrigger className="h-9 dark:bg-slate-950/50 dark:border-white/10 bg-white border-slate-200">
-                          {selectedProductId ? (
-                            <span className={!selectedProduct ? 'text-orange-500' : ''}>
-                              {displayText}
-                            </span>
-                          ) : (
-                            <SelectValue placeholder={t('shared.form.choose_product')} />
-                          )}
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[400px] overflow-y-auto">
-                          {produits.map((p) => (
-                            <SelectItem key={p.id} value={p.id.toString()}>
-                              {p.nom || p.reference || '-'}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder={t('shared.form.choose_product')}
+                        renderLabel={(p) => p.nom || p.reference || '-'}
+                      />
                     </td>
                     <td className="p-2">
                       <Input

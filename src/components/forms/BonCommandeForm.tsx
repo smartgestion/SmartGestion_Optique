@@ -8,6 +8,7 @@ import { formatCurrency, fmtDiopter, fmtAxe } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
@@ -16,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ProductCombobox } from '@/components/ui/ProductCombobox'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -50,6 +52,13 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
   const [verreTva, setVerreTva] = useState(20);
   const [verreQuantite, setVerreQuantite] = useState(1);
   const [verreDesignation, setVerreDesignation] = useState('');
+  // Unifocal (Unifocal) VL/VP split — only relevant when the linked ordonnance
+  // is type_vision === 'progressif'. The user ticks the side(s) to order and
+  // sets a price for each; the document renders/totals only ticked side(s).
+  const [vlSelected, setVlSelected] = useState(true);
+  const [vpSelected, setVpSelected] = useState(false);
+  const [prixVl, setPrixVl] = useState(0);
+  const [prixVp, setPrixVp] = useState(0);
 
   const ligneSchema = z.object({
     produitId: z.string().optional(),
@@ -165,6 +174,16 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
               setVerreQuantite(Number(verreLigne.quantite || 1));
               setVerreDesignation(verreLigne.designation || '');
 
+              // Rehydrate the unifocal VL/VP split from the saved line.
+              const savedVl = verreLigne.vlSelected ?? verreLigne.vl_selected;
+              const savedVp = verreLigne.vpSelected ?? verreLigne.vp_selected;
+              if (savedVl != null || savedVp != null) {
+                setVlSelected(!!Number(savedVl));
+                setVpSelected(!!Number(savedVp));
+              }
+              setPrixVl(Number(verreLigne.prixVl ?? verreLigne.prix_vl ?? 0));
+              setPrixVp(Number(verreLigne.prixVp ?? verreLigne.prix_vp ?? 0));
+
               const prescrId = verreLigne.prescriptionId;
               if (prescrId) {
                 const { data: prescrData } = await supabase
@@ -226,6 +245,15 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
   const fieldsetDisabled = readOnly && !supplierRefEditable;
   const verreProducts = produits.filter((p) => (p.type_produit || p.typeProduit) === 'verre');
   const selectedClient = clients.find((c) => c.id.toString() === clientId);
+  // A "Unifocal" ordonnance (internal type_vision === 'progressif') carries both
+  // a VL and a VP refraction, so the user can split the order into VL and/or VP
+  // with a separate price for each side.
+  const isUnifocal = selectedPrescription?.type_vision === 'progressif';
+  // Effective unit price HT for a verre line: for a unifocal ordonnance it is
+  // the sum of the ticked side(s); otherwise the single verre price.
+  const verreUnitHt = isUnifocal
+    ? (vlSelected ? Number(prixVl || 0) : 0) + (vpSelected ? Number(prixVp || 0) : 0)
+    : Number(verrePrixHt || 0);
 
   // Fetch active prescriptions for the selected client (verre commande only).
   // Nothing is shown until a client is chosen, and only that client's active
@@ -246,7 +274,7 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
 
   const totals = bcType === 'verre'
     ? (() => {
-        const ht = verrePrixHt * (verreQuantite || 0);
+        const ht = verreUnitHt * (verreQuantite || 0);
         const tva = ht * (verreTva / 100);
         return { ht, tva, ttc: ht + tva };
       })()
@@ -353,6 +381,11 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
         setIsLoading(false);
         return;
       }
+      if (data.type === 'verre' && isUnifocal && !vlSelected && !vpSelected) {
+        toast.error('Veuillez cocher au moins une vision (VL ou VP)');
+        setIsLoading(false);
+        return;
+      }
 
       let bonId = initialData?.id;
       let numero;
@@ -443,10 +476,16 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
             prescription_id: selectedPrescription.id,
             designation: verreDesignation || `Verre — Ordonnance #${selectedPrescription.id}`,
             quantite: Number(verreQuantite || 1),
-            prix_unitaire_ht: Number(verrePrixHt || 0),
+            prix_unitaire_ht: Number(verreUnitHt || 0),
             tva: Number(verreTva || 20),
-            montant_ht: Number(verrePrixHt || 0) * Number(verreQuantite || 1),
-            montant_ttc: Number(verrePrixHt || 0) * Number(verreQuantite || 1) * (1 + Number(verreTva || 20) / 100),
+            montant_ht: Number(verreUnitHt || 0) * Number(verreQuantite || 1),
+            montant_ttc: Number(verreUnitHt || 0) * Number(verreQuantite || 1) * (1 + Number(verreTva || 20) / 100),
+            // Unifocal VL/VP split — persist which side(s) were ordered and
+            // the per-side price so the printed PDF can render dynamically.
+            vl_selected: isUnifocal ? (vlSelected ? 1 : 0) : 0,
+            vp_selected: isUnifocal ? (vpSelected ? 1 : 0) : 0,
+            prix_vl: isUnifocal && vlSelected ? Number(prixVl || 0) : null,
+            prix_vp: isUnifocal && vpSelected ? Number(prixVp || 0) : null,
             ordre: 0,
           }]
         : (data.lignes || []).map((ligne, index) => {
@@ -796,22 +835,22 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
                     <div className="text-slate-500">OD Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_sph_vl, '-')}</span></div>
                     <div className="text-slate-500">OD Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_cyl_vl, '-')}</span></div>
                     <div className="text-slate-500">OD Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.od_axe_vl, '-')}</span></div>
-                    <div className="text-slate-500">OD Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_add_vl, '-')}</span></div>
+                    <div className="text-slate-500">{isUnifocal ? 'OD Indice' : 'OD Add'}: <span className="font-mono font-semibold text-slate-800 dark:text-white">{isUnifocal ? (selectedPrescription.od_indice_vl ?? '-') : fmtDiopter(selectedPrescription.od_add_vl, '-')}</span></div>
                     <div className="text-slate-500">OG Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_sph_vl, '-')}</span></div>
                     <div className="text-slate-500">OG Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_cyl_vl, '-')}</span></div>
                     <div className="text-slate-500">OG Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.og_axe_vl, '-')}</span></div>
-                    <div className="text-slate-500">OG Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_add_vl, '-')}</span></div>
+                    <div className="text-slate-500">{isUnifocal ? 'OG Indice' : 'OG Add'}: <span className="font-mono font-semibold text-slate-800 dark:text-white">{isUnifocal ? (selectedPrescription.og_indice_vl ?? '-') : fmtDiopter(selectedPrescription.og_add_vl, '-')}</span></div>
                     {selectedPrescription.od_sph_vp != null && (
                       <>
                         <div className="col-span-2 md:col-span-4 font-semibold text-slate-600 dark:text-slate-400 border-b pb-1 mb-1 mt-2">Réfraction VP</div>
                         <div className="text-slate-500">OD Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_sph_vp, '-')}</span></div>
                         <div className="text-slate-500">OD Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_cyl_vp, '-')}</span></div>
                         <div className="text-slate-500">OD Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.od_axe_vp, '-')}</span></div>
-                        <div className="text-slate-500">OD Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.od_add_vp, '-')}</span></div>
+                        <div className="text-slate-500">{isUnifocal ? 'OD Indice' : 'OD Add'}: <span className="font-mono font-semibold text-slate-800 dark:text-white">{isUnifocal ? (selectedPrescription.od_indice_vp ?? '-') : fmtDiopter(selectedPrescription.od_add_vp, '-')}</span></div>
                         <div className="text-slate-500">OG Sph: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_sph_vp, '-')}</span></div>
                         <div className="text-slate-500">OG Cyl: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_cyl_vp, '-')}</span></div>
                         <div className="text-slate-500">OG Axe: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtAxe(selectedPrescription.og_axe_vp, '-')}</span></div>
-                        <div className="text-slate-500">OG Add: <span className="font-mono font-semibold text-slate-800 dark:text-white">{fmtDiopter(selectedPrescription.og_add_vp, '-')}</span></div>
+                        <div className="text-slate-500">{isUnifocal ? 'OG Indice' : 'OG Add'}: <span className="font-mono font-semibold text-slate-800 dark:text-white">{isUnifocal ? (selectedPrescription.og_indice_vp ?? '-') : fmtDiopter(selectedPrescription.og_add_vp, '-')}</span></div>
                       </>
                     )}
                     {(selectedPrescription.dp_binoculaire || selectedPrescription.dp_od || selectedPrescription.dp_og) && (
@@ -847,24 +886,87 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
                 <div className="space-y-4">
                   <div className="space-y-2">
                       <Label className="text-slate-700 font-semibold dark:text-slate-300">Produit verre</Label>
-                    <Select
+                    <ProductCombobox
                       disabled={lockOthers}
+                      products={verreProducts}
                       value={verreProductId}
                       onValueChange={handleVerreProductSelect}
-                    >
-                      <SelectTrigger className="bg-white border-slate-300 dark:bg-slate-950/50 dark:border-white/10">
-                        <SelectValue placeholder="Sélectionner un produit verre..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {verreProducts.map((p) => (
-                          <SelectItem key={p.id} value={p.id.toString()}>
-                            {p.designation || p.nom || 'Verre'} — {(p.reference || p.ref || '')}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      className="h-11"
+                      placeholder="Sélectionner un produit verre..."
+                      searchPlaceholder="Rechercher un verre..."
+                      renderLabel={(p) => `${p.designation || p.nom || 'Verre'} — ${p.reference || p.ref || ''}`}
+                    />
                   </div>
+                  {/* Unifocal (Unifocal) ordonnance → VL / VP split with a
+                      checkbox + price for each side. Ticking a side includes it
+                      in the order and in the printed PDF/totals. */}
+                  {isUnifocal && (
+                    <div className="rounded-[6px] border border-sky-200 bg-sky-50/40 dark:border-sky-500/20 dark:bg-sky-950/10 p-4 space-y-3">
+                      <p className="text-sm font-semibold text-sky-800 dark:text-sky-300">
+                        Ordonnance unifocale — choisir la/les vision(s) à commander
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            id="bc-vl-selected"
+                            disabled={lockOthers}
+                            checked={vlSelected}
+                            onCheckedChange={(v) => setVlSelected(!!v)}
+                          />
+                          <Label htmlFor="bc-vl-selected" className="font-semibold text-slate-700 dark:text-slate-300 min-w-[120px]">
+                            VL (Vision de Loin)
+                          </Label>
+                          <div className="flex items-center gap-1 flex-1">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="Prix VL HT"
+                              disabled={lockOthers || !vlSelected}
+                              value={prixVl}
+                              onChange={(e) => setPrixVl(Number(e.target.value) || 0)}
+                              className="h-11 bg-white border-slate-300 dark:bg-slate-950/50 dark:border-white/10 dark:text-white"
+                            />
+                            <HtCalculatorButton
+                              disabled={lockOthers || !vlSelected}
+                              defaultTva={Number(verreTva) || 20}
+                              onResult={(ht) => setPrixVl(ht)}
+                              className="h-11 w-11"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            id="bc-vp-selected"
+                            disabled={lockOthers}
+                            checked={vpSelected}
+                            onCheckedChange={(v) => setVpSelected(!!v)}
+                          />
+                          <Label htmlFor="bc-vp-selected" className="font-semibold text-slate-700 dark:text-slate-300 min-w-[120px]">
+                            VP (Vision de Près)
+                          </Label>
+                          <div className="flex items-center gap-1 flex-1">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="Prix VP HT"
+                              disabled={lockOthers || !vpSelected}
+                              value={prixVp}
+                              onChange={(e) => setPrixVp(Number(e.target.value) || 0)}
+                              className="h-11 bg-white border-slate-300 dark:bg-slate-950/50 dark:border-white/10 dark:text-white"
+                            />
+                            <HtCalculatorButton
+                              disabled={lockOthers || !vpSelected}
+                              defaultTva={Number(verreTva) || 20}
+                              onResult={(ht) => setPrixVp(ht)}
+                              className="h-11 w-11"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {!isUnifocal && (
                     <div className="space-y-2">
                       <Label className="text-slate-700 font-semibold dark:text-slate-300">Prix unitaire HT</Label>
                       <div className="flex items-center gap-1">
@@ -884,6 +986,7 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
                         />
                       </div>
                     </div>
+                    )}
                     <div className="space-y-2">
                       <Label className="text-slate-700 font-semibold dark:text-slate-300">{t('shared.form.qty_label')}</Label>
                       <Input
@@ -910,7 +1013,7 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
                     <div className="space-y-2">
                       <Label className="text-slate-700 font-semibold dark:text-slate-300">Prix TTC</Label>
                       <div className="h-11 flex items-center px-3 bg-white border border-slate-300 rounded-lg dark:bg-slate-950/50 dark:border-white/10 dark:text-white font-bold text-lg">
-                        {formatCurrency(verrePrixHt * (verreQuantite || 0) * (1 + verreTva / 100))}
+                        {formatCurrency(verreUnitHt * (verreQuantite || 0) * (1 + verreTva / 100))}
                       </div>
                     </div>
                   </div>
@@ -962,22 +1065,14 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
                 return (
                   <tr key={field.id} className="hover:bg-slate-50/50 transition-colors dark:hover:bg-white/[0.03]">
                     <td className="p-2">
-                      <Select
+                      <ProductCombobox
                         disabled={lockOthers}
-                        value={form.watch(`lignes.${index}.produitId`) || ""}
+                        products={produits}
+                        value={form.watch(`lignes.${index}.produitId`) || ''}
                         onValueChange={(val) => handleProduitSelect(index, val)}
-                      >
-                        <SelectTrigger className="h-9 bg-white border-slate-200 dark:bg-slate-950/50 dark:border-white/10 [&_.lucide-chevron-down]:dark:text-slate-500">
-                          <SelectValue placeholder={t('shared.form.choose_product')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {produits.map((p) => (
-                            <SelectItem key={p.id} value={p.id.toString()}>
-                              {p.designation || p.nom || '-'}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder={t('shared.form.choose_product')}
+                        renderLabel={(p) => p.designation || p.nom || '-'}
+                      />
                     </td>
                     <td className="p-2">
                       <Input
