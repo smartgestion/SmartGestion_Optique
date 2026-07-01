@@ -27,9 +27,11 @@ import { ProductCombobox } from '@/components/ui/ProductCombobox'
 interface FactureFormProps {
   initialData?: any;
   onSuccess: () => void;
+  /** When set, the created/updated facture is linked to this Ordre de Travail. */
+  ordreTravailId?: number | string | null;
 }
 
-export function FactureForm({ initialData, onSuccess }: FactureFormProps) {
+export function FactureForm({ initialData, onSuccess, ordreTravailId }: FactureFormProps) {
   const { t } = useTranslation();
   const { user } = useAuth();
   // Editing an existing document vs creating a new one. New documents are
@@ -293,6 +295,8 @@ export function FactureForm({ initialData, onSuccess }: FactureFormProps) {
         montant_tva: Number(totals.tva) || 0,
         montant_ttc: Number(totals.ttc) || 0,
         reste_a_payer: data.statut === 'payée' ? 0 : (Number(data.resteAPayer) || Number(totals.ttc) || 0),
+        // Link to the originating Ordre de Travail when created from the OT hub.
+        ...(ordreTravailId ? { ordre_travail_id: Number(ordreTravailId) } : {}),
       };
 
       let factureId = initialData?.id;

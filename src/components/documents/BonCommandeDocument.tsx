@@ -139,6 +139,11 @@ function OptiqueBonCommandeDocument({ bon, entreprise, lang }: { bon: any; entre
         : ''
 
   const baseName = (client?.nomSociete || client?.nom || '-').toString().toUpperCase()
+  // Client identity number (CIN/CINE) + social cover, fetched from the client.
+  const clientCine = client?.cine || client?.CINE || client?.cin || ''
+  const clientCouverture = client?.couverture_sociale
+    ? `${String(client.couverture_sociale).toUpperCase()}${client.couverture_sociale_detail ? ` (${client.couverture_sociale_detail})` : ''}`
+    : ''
 
   // Short OD/OG recap shown in the summary line (uses the chosen vision).
   const odRecap = formatSphCyl(p.od_sph_vl, p.od_cyl_vl, p.od_axe_vl) || formatSphCyl(p.od_sph_vp, p.od_cyl_vp, p.od_axe_vp)
@@ -277,8 +282,16 @@ function OptiqueBonCommandeDocument({ bon, entreprise, lang }: { bon: any; entre
           {/* ===== PATIENT + ORDONNANCE BOX ===== */}
           <div style={{ border: `1px solid ${C.border}`, marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '12px 16px', borderBottom: `1px solid ${C.borderSoft}` }}>
-              <div style={{ fontWeight: 700, fontSize: '11pt', color: C.title, letterSpacing: 0.3 }}>
-                {baseName}
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '11pt', color: C.title, letterSpacing: 0.3 }}>
+                  {baseName}
+                </div>
+                {clientCine && (
+                  <div style={{ fontSize: '9pt', color: C.muted, marginTop: 2 }}>CIN/CINE : {clientCine}</div>
+                )}
+                {clientCouverture && (
+                  <div style={{ fontSize: '9pt', color: C.muted, marginTop: 2 }}>Couverture : {clientCouverture}</div>
+                )}
               </div>
               <div style={{ textAlign: 'right', fontSize: '9pt', color: C.muted, lineHeight: 1.6 }}>
                 {dateOrdonnance !== '-' && <div>Ordonnance du {dateOrdonnance}</div>}

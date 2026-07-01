@@ -246,6 +246,7 @@ pub const MIGRATIONS: &[&str] = &[
         montant_ttc           REAL    DEFAULT 0,
         notes                 TEXT,
         motif_annulation      TEXT,
+        ordre_travail_id      INTEGER,
         created_at            TEXT    DEFAULT CURRENT_TIMESTAMP,
         updated_at            TEXT    DEFAULT CURRENT_TIMESTAMP,
         stock_updated         INTEGER DEFAULT 0,
@@ -776,12 +777,28 @@ pub const MIGRATIONS: &[&str] = &[
         prix_vente_ht       REAL    DEFAULT 0,
         taux_tva            REAL    DEFAULT 20,
 
+        -- Central-hub: a linked walk-in sale (ordre_travail is the hub, it
+        -- stores the id of an existing vente passager it is tied to).
+        vente_id            INTEGER,
+
         created_at          TEXT    DEFAULT CURRENT_TIMESTAMP,
         updated_at          TEXT    DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (client_id)         REFERENCES clients(id),
         FOREIGN KEY (prescription_id)   REFERENCES prescriptions(id),
         FOREIGN KEY (produit_monture_id) REFERENCES produits(id),
         FOREIGN KEY (produit_verre_id)  REFERENCES produits(id)
+    );
+    "#,
+
+    // Ordre de travail — notes timeline (multiple dated notes per OT).
+    r#"
+    CREATE TABLE IF NOT EXISTS ordre_travail_notes (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id          TEXT,
+        ordre_travail_id INTEGER NOT NULL,
+        note             TEXT    NOT NULL,
+        created_at       TEXT    DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (ordre_travail_id) REFERENCES ordres_travail(id)
     );
     "#,
 
@@ -936,6 +953,10 @@ pub const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_ordres_travail_client       ON ordres_travail(client_id);",
     "CREATE INDEX IF NOT EXISTS idx_ordres_travail_user         ON ordres_travail(user_id);",
     "CREATE INDEX IF NOT EXISTS idx_ordres_travail_statut       ON ordres_travail(statut);",
+    "CREATE INDEX IF NOT EXISTS idx_ot_notes_ot                 ON ordre_travail_notes(ordre_travail_id);",
+    // NOTE: indexes on `bons_commande(ordre_travail_id)` and
+    // `factures(ordre_travail_id)` are created in mod.rs::apply_migrations
+    // AFTER the columns are added (they don't exist on pre-existing DBs yet).
     "CREATE INDEX IF NOT EXISTS idx_rdv_client                  ON rendez_vous(client_id);",
     "CREATE INDEX IF NOT EXISTS idx_rdv_user                    ON rendez_vous(user_id);",
     "CREATE INDEX IF NOT EXISTS idx_rdv_date                    ON rendez_vous(date_rdv);",

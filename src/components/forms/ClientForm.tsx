@@ -27,7 +27,9 @@ import { useAuth } from '@/contexts/AuthContext'
 
 interface ClientFormProps {
   initialData?: any;
-  onSuccess?: () => void;
+  /** Receives the created/updated client row (when available) so callers such
+   *  as the Ordre de Travail hub can auto-select the freshly created client. */
+  onSuccess?: (client?: any) => void;
 }
 
 const COUVERTURE_OPTIONS = ['cnss', 'cnops', 'far', 'assurance', 'autre'] as const;
@@ -110,17 +112,20 @@ export function ClientForm({ initialData, onSuccess }: ClientFormProps) {
         lunette_expiration_date: data.lunetteExpirationDate || null,
       };
       
+      let savedClient: any = initialData?.id ? { ...initialData, ...payload } : null;
       if (isEditing) {
-        const { error } = await supabase.from('clients').update(payload).eq('id', initialData.id);
+        const { data: updated, error } = await supabase.from('clients').update(payload).eq('id', initialData.id).select().single();
         if (error) throw error;
+        if (updated) savedClient = updated;
       } else {
-        const { error } = await supabase.from('clients').insert([{ ...payload, user_id: user?.id }]);
+        const { data: inserted, error } = await supabase.from('clients').insert([{ ...payload, user_id: user?.id }]).select().single();
         if (error) throw error;
+        savedClient = inserted;
       }
 
       toast.success(isEditing ? 'Client modifié avec succès' : 'Client créé avec succès');
       isInitialized.current = false;
-      if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess(savedClient);
     } catch (error: any) {
       toast.error(error.message || t('shared.toast.save_error'));
       console.error(error);

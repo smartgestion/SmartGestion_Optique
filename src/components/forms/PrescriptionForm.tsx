@@ -20,7 +20,9 @@ import { Stethoscope, User, Phone, Mail, MapPin, UploadCloud, FileText, X } from
 
 interface PrescriptionFormProps {
   initialData?: any;
-  onSuccess?: () => void;
+  /** Receives the created/updated prescription row so callers like the Ordre
+   *  de Travail hub can auto-link the freshly created ordonnance. */
+  onSuccess?: (prescription?: any) => void;
 }
 
 const BASES_PRISME = ['nasal', 'temporal', 'superieur', 'inferieur', 'nasal_superieur', 'nasal_inferieur', 'temporal_superieur', 'temporal_inferieur'] as const;
@@ -576,16 +578,19 @@ export function PrescriptionForm({ initialData, onSuccess }: PrescriptionFormPro
       };
 
       let result;
+      let savedPrescription: any = initialData?.id ? { ...initialData, ...payload } : null;
       if (initialData?.id) {
-        result = await supabase.from('prescriptions').update(payload).eq('id', initialData.id);
+        result = await supabase.from('prescriptions').update(payload).eq('id', initialData.id).select().single();
+        if (result.data) savedPrescription = result.data;
       } else {
-        result = await supabase.from('prescriptions').insert([{ ...payload, user_id: user?.id }]);
+        result = await supabase.from('prescriptions').insert([{ ...payload, user_id: user?.id }]).select().single();
+        if (result.data) savedPrescription = result.data;
       }
 
       if (result.error) throw result.error;
 
       toast.success('Ordonnance enregistrée avec succès');
-      if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess(savedPrescription);
     } catch (error: any) {
       toast.error(error.message || 'Erreur lors de l\'enregistrement');
       console.error(error);

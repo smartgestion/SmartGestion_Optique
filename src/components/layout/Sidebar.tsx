@@ -27,6 +27,7 @@ const navigationGroups = [
     titleKey: 'nav.optique',
     items: [
       { nameKey: 'navigation.prescriptions', href: '/prescriptions', icon: Eye },
+      { nameKey: 'navigation.work_orders', href: '/ordres-travail', icon: FlaskConical },
       { nameKey: 'navigation.appointments', href: '/rendez-vous', icon: CalendarDays },
       { nameKey: 'navigation.products', href: '/produits', icon: Glasses },
     ]

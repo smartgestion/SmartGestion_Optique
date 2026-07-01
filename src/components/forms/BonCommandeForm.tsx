@@ -31,9 +31,13 @@ interface BCFormProps {
    *  the Save button is hidden. Used for non-brouillon statuses (envoyé,
    *  confirmé, livré, annulé) where the BC must not be modified. */
   readOnly?: boolean;
+  /** When set, the created/updated bon de commande is linked to this OT. */
+  ordreTravailId?: number | string | null;
+  /** Prefill a NEW verre commande (from the OT hub) with a client + ordonnance. */
+  prefill?: { clientId?: string | number; prescription?: any };
 }
 
-export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BCFormProps) {
+export function BonCommandeForm({ initialData, onSuccess, readOnly = false, ordreTravailId, prefill }: BCFormProps) {
   const { t } = useTranslation();
   const { user } = useAuth();
   // Editing an existing document vs creating a new one. New documents are
@@ -194,6 +198,29 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
                 if (prescrData) setSelectedPrescription(prescrData);
               }
             }
+          }
+        } else if (prefill?.clientId) {
+          // Prefill for a NEW verre commande created from the Ordre de Travail
+          // hub: preselect the client + ordonnance and switch to the verre flow.
+          form.reset({
+            type: 'verre',
+            fournisseurId: '',
+            numeroFournisseur: '',
+            clientId: prefill.clientId.toString(),
+            dateEmission: new Date().toISOString().split('T')[0],
+            dateLivraisonPrevue: '',
+            statut: 'brouillon',
+            motifAnnulation: '',
+            modePaiement: 'Virement',
+            notes: parametresData?.[0]?.pied_page_defaut || '',
+            lignes: [],
+          });
+          if (prefill.prescription) {
+            setSelectedPrescription(prefill.prescription);
+            const pr = prefill.prescription;
+            const odStr = `OD: ${fmtDiopter(pr.od_sph_vl, '-')}${pr.od_cyl_vl ? ` (${fmtDiopter(pr.od_cyl_vl)})` : ''}`;
+            const ogStr = `OG: ${fmtDiopter(pr.og_sph_vl, '-')}${pr.og_cyl_vl ? ` (${fmtDiopter(pr.og_cyl_vl)})` : ''}`;
+            setVerreDesignation(`Verre ${pr.verre_type || ''} — ${odStr} / ${ogStr}`);
           }
         } else {
           form.reset({
@@ -431,6 +458,10 @@ export function BonCommandeForm({ initialData, onSuccess, readOnly = false }: BC
       }
       if (parsedClientId) {
         payload.client_id = parsedClientId;
+      }
+      // Link to the originating Ordre de Travail when created from the OT hub.
+      if (ordreTravailId) {
+        payload.ordre_travail_id = Number(ordreTravailId);
       }
 
       // Snapshot the previous stock_updated flag BEFORE the row gets

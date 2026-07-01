@@ -270,6 +270,8 @@ fn apply_migrations(conn: &Connection) -> DbResult<()> {
         add_column_if_missing(conn, "bons_commande", "numero_fournisseur", "TEXT")?;
         // bons_commande — cancellation reason (filled when statut = 'annulé')
         add_column_if_missing(conn, "bons_commande", "motif_annulation", "TEXT")?;
+        // bons_commande — linked Ordre de Travail (central-hub creation)
+        add_column_if_missing(conn, "bons_commande", "ordre_travail_id", "INTEGER")?;
         // bon_commande_lignes — linked prescription for verre orders
         add_column_if_missing(conn, "bon_commande_lignes", "prescription_id", "INTEGER")?;
         // bon_commande_lignes — unifocal (Unifocal) VL/VP split: which vision
@@ -278,6 +280,34 @@ fn apply_migrations(conn: &Connection) -> DbResult<()> {
         add_column_if_missing(conn, "bon_commande_lignes", "vp_selected", "INTEGER DEFAULT 0")?;
         add_column_if_missing(conn, "bon_commande_lignes", "prix_vl",     "REAL")?;
         add_column_if_missing(conn, "bon_commande_lignes", "prix_vp",     "REAL")?;
+
+        // ordres_travail — central-hub: linked walk-in sale id, and the notes
+        // timeline table. `factures.ordre_travail_id` already exists above.
+        add_column_if_missing(conn, "ordres_travail", "vente_id", "INTEGER")?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ordre_travail_notes (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id          TEXT,
+                ordre_travail_id INTEGER NOT NULL,
+                note             TEXT    NOT NULL,
+                created_at       TEXT    DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ot_notes_ot ON ordre_travail_notes(ordre_travail_id)",
+            [],
+        )?;
+        // These indexes reference migration-added columns, so they must be
+        // created here (after the ALTER TABLEs above), not in the base schema.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bons_commande_ot ON bons_commande(ordre_travail_id)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_factures_ot ON factures(ordre_travail_id)",
+            [],
+        )?;
 
         // avoirs_fournisseur — avoir type (simple/verre, mirrors BC type) and
         // creation mode ('manuel' or 'auto' when generated from a BC cancellation).

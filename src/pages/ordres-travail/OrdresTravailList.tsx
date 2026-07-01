@@ -32,16 +32,19 @@ interface OrdreTravail {
   prix_vente_ht: number;
 }
 
-const STATUTS = ['brouillon', 'envoye_labo', 'recu_labo', 'montage', 'controle', 'termine', 'annule'] as const;
+const STATUTS = ['brouillon', 'en_cours', 'termine', 'livre', 'annule'] as const;
 
 const statutConfig: Record<string, string> = {
   brouillon:   'bg-slate-50 text-slate-600 border-slate-200/50 dark:bg-slate-500/10 dark:text-slate-400',
+  en_cours:    'bg-blue-50 text-blue-600 border-blue-200/50 dark:bg-blue-500/10 dark:text-blue-400',
+  termine:     'bg-emerald-50 text-emerald-700 border-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400',
+  livre:       'bg-violet-50 text-violet-700 border-violet-200/50 dark:bg-violet-500/10 dark:text-violet-400',
+  annule:      'bg-rose-50 text-rose-700 border-rose-200/50 dark:bg-rose-500/10 dark:text-rose-400',
+  // Legacy values (older rows) — keep readable badges.
   envoye_labo: 'bg-blue-50 text-blue-600 border-blue-200/50 dark:bg-blue-500/10 dark:text-blue-400',
   recu_labo:   'bg-indigo-50 text-indigo-600 border-indigo-200/50 dark:bg-indigo-500/10 dark:text-indigo-400',
   montage:     'bg-amber-50 text-amber-600 border-amber-200/50 dark:bg-amber-500/10 dark:text-amber-400',
   controle:    'bg-violet-50 text-violet-600 border-violet-200/50 dark:bg-violet-500/10 dark:text-violet-400',
-  termine:     'bg-emerald-50 text-emerald-700 border-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400',
-  annule:      'bg-rose-50 text-rose-700 border-rose-200/50 dark:bg-rose-500/10 dark:text-rose-400',
 };
 
 const ITEMS_PER_PAGE = 10;
@@ -71,9 +74,23 @@ export function OrdresTravailList() {
 
       if (error) { toast.error(t('ordres_travail.toast_load_error')); setOrdres([]); setIsLoading(false); return; }
 
-      const mapped = (data || []).map((o: any) => ({
+      const rows = data || [];
+
+      // The embedded `clients(nom)` join isn't always returned (e.g. the local
+      // SQLite adapter), which would make the client column fall back to `#id`.
+      // Look the names up explicitly so the full client name always shows.
+      const clientNameById = new Map<number, string>();
+      const missingIds = Array.from(new Set(
+        rows.filter((o: any) => !o.clients?.nom && o.client_id != null).map((o: any) => o.client_id)
+      ));
+      if (missingIds.length > 0) {
+        const { data: clientsData } = await supabase.from('clients').select('id, nom').in('id', missingIds);
+        (clientsData || []).forEach((c: any) => clientNameById.set(c.id, c.nom));
+      }
+
+      const mapped = rows.map((o: any) => ({
         ...o,
-        client_nom: o.clients?.nom || `#${o.client_id}`,
+        client_nom: o.clients?.nom || clientNameById.get(o.client_id) || (o.client_id != null ? `#${o.client_id}` : '-'),
       }));
       setOrdres(mapped);
     } catch { setOrdres([]); } finally { setIsLoading(false); }
@@ -125,7 +142,7 @@ export function OrdresTravailList() {
       {showForm ? (
         <div className="space-y-6">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={closeForm}>
+            <Button variant="ghost" size="icon" onClick={() => { closeForm(); fetchOrdres(); }}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
